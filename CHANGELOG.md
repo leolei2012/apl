@@ -11,18 +11,19 @@
 
 ### Changed
 
+- 仿真器目录由 `emulator` 改名为 `simulator`。
 - 六颗按键改为各自选配。`APL_HMI_COMPILE_KEY_PURIFY`、`APL_HMI_COMPILE_KEY_HUMIDITY`、`APL_HMI_COMPILE_KEY_TIMER`、`APL_HMI_COMPILE_KEY_LIGHT`、`APL_HMI_COMPILE_KEY_SPEED`、`APL_HMI_COMPILE_KEY_POWER` 默认都是 1。未编入的键不认短按、长按和组合，键灯读写视为非法。键编号和六路采样结构不变。
 - 整机状态、UV 与负离子开关、风机档位、水位段数改到 `include/apl_type.h`。`apl_core.h` 包含这份枚举。人机的按键、单位和童锁仍在 `apl_hmi.h`。
 - 去掉 `apl_core/`、`apl_hmi/` 目录。公开头放在 `include/`，实现放在 `src/`。`include/apl.h` 与 `src/apl.c` 组成 `struct apl`：`apl_init` 初始化主控和人机，`apl_tick` 先调用 `apl_core_tick` 再调用 `apl_hmi_tick`。库内仍不创建静态实例。人机数据手册改到 `docs/规格/datasheet.md`。
-- 仿真器默认入口改为鼠标键盘面板。`emulator/tui.py` 合并鼠标、键盘和保持按下，并从 getter 绘制；`emulator/panel_sim.py` 仍编译加载库、持有宿主并驱动 tick。`--plain` 保留纯键盘面板。
-- `emulator/panel_sim.py` 改为宿主仿真：加载 APL 库，注入按键与传感器，按 10 ms 调用 tick，画面从 getter 读出。库尚未实现的风干、配网、睡眠、自清洁不再在仿真器里另做一套。
+- 仿真器默认入口改为鼠标键盘面板。`simulator/tui.py` 合并鼠标、键盘和保持按下，并从 getter 绘制；`simulator/panel_sim.py` 仍编译加载库、持有宿主并驱动 tick。`--plain` 保留纯键盘面板。
+- `simulator/panel_sim.py` 改为宿主仿真：加载 APL 库，注入按键与传感器，按 10 ms 调用 tick，画面从 getter 读出。库尚未实现的风干、配网、睡眠、自清洁不再在仿真器里另做一套。
 - 宿主与 APL 双向的数据交换改为 getter 和 setter。`struct apl_core`、`struct apl_hmi` 里的字节只用于分配实例。硬件仍由宿主注入的 ops 提供。到时、关机、按键和组合键仍是回调。
 
 ### Added
 
 - `include/apl_type.h`。主控和人机共用的枚举放在这里，两个模块仍不互相包含。
 - `apl_init`、`apl_tick`。使用方持有一份 `struct apl`，里面是 `struct apl_core` 和 `struct apl_hmi`。
-- `emulator/tui.py`、`emulator/test_tui.py`，以及 `emulator/README.md`、`emulator/使用说明.md`、`emulator/设计说明.md`。`test_tui.py` 用真实 DLL 检查鼠标路径。
+- `simulator/tui.py`、`simulator/test_tui.py`，以及 `simulator/README.md`、`simulator/使用说明.md`、`simulator/设计说明.md`。`test_tui.py` 用真实 DLL 检查鼠标路径。
 - 主控读取：`apl_core_power_get`、`apl_core_fan_gear_get`，以及按编译开关出现的滤网计数和启用标志 getter。动态配置的修改入口仍未规定，启用标志没有 setter。
 - 人机读写：键灯、氛围灯亮度与颜色、水位灯、数码管、童锁、净化/加湿启用标志，以及 `apl_hmi_key_callback_set`。
 - `apl_core` 实现：`include/apl_core.h`、`src/apl_core.c`。开关机、秒定时、风机档位、滤网清零，以及 10 ms 一拍上的定时和水位数边沿。

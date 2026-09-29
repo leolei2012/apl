@@ -18,7 +18,7 @@ APL 的 Windows 终端宿主，用鼠标、键盘模拟面板操作，用传感�
 在工程根目录运行：
 
 ```powershell
-python emulator/panel_sim.py
+python simulator/panel_sim.py
 ```
 
 需要 Windows 控制台、Python 和支持 C11 的 Visual Studio Build Tools；无需第三方 Python 包。终端至少 **126 列 × 40 行**。
@@ -32,12 +32,12 @@ python emulator/panel_sim.py
 `P` 或底部“断电 / 上电”切换外部供电，与面板 `Power` 开关机分开。
 断电停止 APL、丢弃运行内存，不触发正常关机回调，也不会临时补存数据。
 
-存储器方法和接入示例见 [存储与供电.md](存储与供电.md)。emulator 只提供字节读写，不规定 APL 保存哪些业务状态。
+存储器方法和接入示例见 [存储与供电.md](存储与供电.md)。simulator 只提供字节读写，不规定 APL 保存哪些业务状态。
 
 新增文件：`storage.py` 为文件存储器，`test_power_memory.py` 验证供电与持久化。
 
 ```powershell
-python emulator/test_power_memory.py
+python simulator/test_power_memory.py
 ```
 
 ## 自定义信息显示

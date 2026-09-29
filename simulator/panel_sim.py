@@ -5,8 +5,8 @@ APL 面板的宿主仿真。
 持有一份 struct apl，注入按键电平和传感器，每 10 ms 调用 apl_tick。
 终端画面从 getter 读出。库尚未规定的风干、配网、睡眠、自清洁不在这里另做。
 
-运行：python emulator/panel_sim.py
-自检：python emulator/panel_sim.py --self-test
+运行：python simulator/panel_sim.py
+自检：python simulator/panel_sim.py --self-test
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def host_from(ctx: int | ctypes.c_void_p) -> Host:
 
 
 def ensure_dll() -> ctypes.CDLL:
-    out_dir = Path(tempfile.gettempdir()) / "apl-emulator"
+    out_dir = Path(tempfile.gettempdir()) / "apl-simulator"
     out_dir.mkdir(parents=True, exist_ok=True)
     dll_path = out_dir / "apl.dll"
     sources = [
@@ -163,7 +163,7 @@ def ensure_dll() -> ctypes.CDLL:
         ROOT / "include" / "apl_hmi.h",
         ROOT / "config" / "apl_config.h",
         ROOT / "config" / "apl_hmi_config.h",
-        ROOT / "emulator" / "apl.def",
+        ROOT / "simulator" / "apl.def",
     ]
     stale = (not dll_path.exists()) or any(dll_path.stat().st_mtime < item.stat().st_mtime for item in sources)
     if stale:
@@ -180,7 +180,7 @@ def ensure_dll() -> ctypes.CDLL:
                 f'/I "{ROOT / "config"}" '
                 f'/Fo"{obj}" /Fe"{dll_path}" '
                 f'"{sources[0]}" "{sources[1]}" "{sources[2]}" '
-                f'/link /DEF:"{ROOT / "emulator" / "apl.def"}"',
+                f'/link /DEF:"{ROOT / "simulator" / "apl.def"}"',
                 "if errorlevel 1 exit /b 1",
             ]
         )
@@ -1094,7 +1094,7 @@ def run() -> None:
         sys.exit(1)
     lib = ensure_dll()
     bind_api(lib)
-    host = Host(lib, Storage(ROOT / "emulator" / "data" / "nvram.bin"))
+    host = Host(lib, Storage(ROOT / "simulator" / "data" / "nvram.bin"))
     handle, out_mode, in_mode = console_setup()
     latched: set[str] = set()
     previous = time.monotonic()

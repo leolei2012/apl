@@ -249,7 +249,7 @@ def run():
         raise SystemExit("请在 Windows Terminal 或控制台里运行。")
     lib = apl.ensure_dll()
     apl.bind_api(lib)
-    panel = Panel(apl.Host(lib, apl.Storage(apl.ROOT / "emulator" / "data" / "nvram.bin")))
+    panel = Panel(apl.Host(lib, apl.Storage(apl.ROOT / "simulator" / "data" / "nvram.bin")))
     handle, out_mode, in_mode = apl.console_setup()
     # Extended flags disable Quick Edit; mouse/focus events stay in the input queue.
     apl.kernel32.SetConsoleMode(handle, 0x0080 | 0x0010 | 0x0008 | 0x0001)
