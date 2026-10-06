@@ -20,6 +20,10 @@
 
 _Static_assert(APL_HMI_KEY_COUNT <= 8, "键掩码放在 uint8_t 里");
 _Static_assert(APL_HMI_LONG_PRESS_TICKS == 300u, "3 秒在 10 ms 拍上是 300 拍");
+_Static_assert(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_HMI_TICK_MS),
+               "上电全灯 2 秒");
+_Static_assert(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
+_Static_assert(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
 _Static_assert(APL_HMI_VERSION_NUM == 0x000100u, "版本号与分段宏不一致");
 _Static_assert(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
 
@@ -64,6 +68,7 @@ struct APL_HMI_MAY_ALIAS apl_hmi_state
     enum apl_hmi_child_lock child_lock;
     uint8_t purify_enabled;
     uint8_t humidify_enabled;
+    uint16_t powerup_lamp_ticks;
     const struct apl_hmi_ops *ops;
     void *ctx;
     struct apl_hmi_key_track track[APL_HMI_KEY_COUNT];
@@ -250,6 +255,81 @@ static void apl_hmi_force_disabled_lamps(struct apl_hmi_state *state)
     if (0u == state->humidify_enabled)
     {
         state->key[APL_HMI_KEY_HUMIDITY].brightness = 0u;
+    }
+}
+
+static void apl_hmi_lamps_fill(struct apl_hmi_state *state, uint8_t brightness)
+{
+    uint8_t index;
+
+    for (index = 0u; index < APL_HMI_KEY_COUNT; index++)
+    {
+        if (0u != apl_hmi_key_is_compiled((enum apl_hmi_key_id)index))
+        {
+            state->key[index].brightness = brightness;
+        }
+    }
+
+    state->ambient_brightness = brightness;
+
+    for (index = 0u; index < APL_HMI_WATER_LAMP_COUNT; index++)
+    {
+        state->water[index] = brightness;
+    }
+
+    state->digit_brightness = brightness;
+}
+
+static void apl_hmi_powerup_show(struct apl_hmi_state *state)
+{
+    uint8_t index;
+
+    apl_hmi_lamps_fill(state, APL_HMI_LAMP_FULL);
+
+    for (index = 0u; index < APL_HMI_DIGIT_COUNT; index++)
+    {
+        state->digit_content[index] = '8';
+    }
+
+    state->digit_unit = APL_HMI_UNIT_NONE;
+}
+
+static void apl_hmi_powerup_idle(struct apl_hmi_state *state)
+{
+    uint8_t index;
+
+    apl_hmi_lamps_fill(state, 0u);
+
+    if (0u != apl_hmi_key_is_compiled(APL_HMI_KEY_POWER))
+    {
+        state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_HALF;
+    }
+
+    for (index = 0u; index < APL_HMI_DIGIT_COUNT; index++)
+    {
+        state->digit_content[index] = ' ';
+    }
+
+    state->digit_unit = APL_HMI_UNIT_NONE;
+}
+
+/** 全灯阶段每拍重画。未启用的净化、加湿键灯随后仍被强制熄灭。 */
+static void apl_hmi_powerup_tick(struct apl_hmi_state *state)
+{
+    if (0u == state->powerup_lamp_ticks)
+    {
+        return;
+    }
+
+    state->powerup_lamp_ticks--;
+
+    if (0u == state->powerup_lamp_ticks)
+    {
+        apl_hmi_powerup_idle(state);
+    }
+    else
+    {
+        apl_hmi_powerup_show(state);
     }
 }
 
@@ -459,6 +539,8 @@ void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx
     state->purify_enabled = 1u;
     state->humidify_enabled = 1u;
     state->digit_unit = APL_HMI_UNIT_NONE;
+    state->powerup_lamp_ticks = APL_HMI_POWERUP_LAMP_TICKS;
+    apl_hmi_powerup_show(state);
 }
 
 void apl_hmi_tick(struct apl_hmi *self)
@@ -477,6 +559,7 @@ void apl_hmi_tick(struct apl_hmi *self)
     state = apl_hmi_state_of(self);
     if ((NULL == state->ops) || (NULL == state->ops->key_state_get))
     {
+        apl_hmi_powerup_tick(state);
         apl_hmi_force_disabled_lamps(state);
         return;
     }
@@ -487,7 +570,18 @@ void apl_hmi_tick(struct apl_hmi *self)
     locked = (uint8_t)(APL_HMI_CHILD_LOCK_ON == state->child_lock);
     suppress = apl_hmi_combos_update(self, state, down_mask, locked);
     apl_hmi_keys_resolve(self, state, down_mask, suppress, locked);
+    apl_hmi_powerup_tick(state);
     apl_hmi_force_disabled_lamps(state);
+}
+
+uint8_t apl_hmi_powerup_lamp_get(const struct apl_hmi *self)
+{
+    if (NULL == self)
+    {
+        return 0u;
+    }
+
+    return (uint8_t)(0u != apl_hmi_state_of_const(self)->powerup_lamp_ticks);
 }
 
 void apl_hmi_key_lamp_set(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t brightness)

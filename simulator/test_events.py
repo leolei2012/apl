@@ -8,12 +8,14 @@ class EventTest(unittest.TestCase):
         lib = apl.ensure_dll()
         apl.bind_api(lib)
         self.host = apl.Host(lib)
+        self.host.step(apl.POWERUP_TICKS)
         self.host.events.clear()
 
     def test_gesture_precedes_effect(self):
         h = self.host
         for key in range(6):
             h.reset()
+            h.step(apl.POWERUP_TICKS)
             h.events.clear()
             h.down[key] = True
             h.step()
@@ -21,6 +23,7 @@ class EventTest(unittest.TestCase):
             h.step()
             self.assertEqual(h.events[0][1], apl.KEY_NAMES[key] + " 短按")
         h.reset()
+        h.step(apl.POWERUP_TICKS)
         h.events.clear()
         h.down[apl.KEY_LIGHT] = True
         h.step(300)

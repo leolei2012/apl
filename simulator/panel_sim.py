@@ -79,6 +79,9 @@ def read_macro(path: Path, name: str) -> int:
 
 CORE_BYTES = read_macro(ROOT / "include" / "apl_core.h", "APL_CORE_OPAQUE_SIZE")
 HMI_BYTES = read_macro(ROOT / "include" / "apl_hmi.h", "APL_HMI_OPAQUE_SIZE")
+LAMP_FULL = read_macro(ROOT / "include" / "apl_hmi.h", "APL_HMI_LAMP_FULL")
+LAMP_HALF = read_macro(ROOT / "include" / "apl_hmi.h", "APL_HMI_LAMP_HALF")
+POWERUP_TICKS = read_macro(ROOT / "include" / "apl_hmi.h", "APL_HMI_POWERUP_LAMP_TICKS")
 
 
 class Core(ctypes.Union):
@@ -161,7 +164,7 @@ def ensure_dll() -> ctypes.CDLL:
         ROOT / "include" / "apl_type.h",
         ROOT / "include" / "apl_core.h",
         ROOT / "include" / "apl_hmi.h",
-        ROOT / "config" / "apl_config.h",
+        ROOT / "config" / "apl_core_config.h",
         ROOT / "config" / "apl_hmi_config.h",
         ROOT / "simulator" / "apl.def",
     ]
@@ -240,6 +243,8 @@ def bind_api(lib: ctypes.CDLL) -> None:
     lib.apl_hmi_init.restype = None
     lib.apl_hmi_tick.argtypes = [hmi_p]
     lib.apl_hmi_tick.restype = None
+    lib.apl_hmi_powerup_lamp_get.argtypes = [hmi_p]
+    lib.apl_hmi_powerup_lamp_get.restype = ctypes.c_uint8
     lib.apl_hmi_key_lamp_set.argtypes = [hmi_p, ctypes.c_int, ctypes.c_uint8]
     lib.apl_hmi_key_lamp_set.restype = None
     lib.apl_hmi_key_lamp_get.argtypes = [hmi_p, ctypes.c_int]
@@ -643,14 +648,17 @@ class Host:
         humidify = int(lib.apl_core_humidify_enabled_get(core))
         lib.apl_hmi_purify_enabled_set(hmi, purify)
         lib.apl_hmi_humidify_enabled_set(hmi, humidify)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_POWER, 1 if power_on else 0)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_SPEED, 1 if power_on else 0)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_TIMER, 1 if self.timer() > 0 else 0)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_PURIFY, 1 if power_on and purify else 0)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_HUMIDITY, 1 if power_on and humidify else 0)
-        lib.apl_hmi_key_lamp_set(hmi, KEY_LIGHT, 1 if self.panel_light else 0)
+        if lib.apl_hmi_powerup_lamp_get(hmi):
+            self.observe_outputs()
+            return
+        lib.apl_hmi_key_lamp_set(hmi, KEY_POWER, LAMP_FULL if power_on else LAMP_HALF)
+        lib.apl_hmi_key_lamp_set(hmi, KEY_SPEED, LAMP_FULL if power_on else 0)
+        lib.apl_hmi_key_lamp_set(hmi, KEY_TIMER, LAMP_FULL if self.timer() > 0 else 0)
+        lib.apl_hmi_key_lamp_set(hmi, KEY_PURIFY, LAMP_FULL if power_on and purify else 0)
+        lib.apl_hmi_key_lamp_set(hmi, KEY_HUMIDITY, LAMP_FULL if power_on and humidify else 0)
+        lib.apl_hmi_key_lamp_set(hmi, KEY_LIGHT, LAMP_FULL if power_on and self.panel_light else 0)
         for index in range(1, 5):
-            lit = 1 if humidify and self.water >= index else 0
+            lit = LAMP_FULL if humidify and self.water >= index else 0
             lib.apl_hmi_water_lamp_set(hmi, index, lit)
         seconds = self.timer()
         if seconds == 0:
@@ -663,7 +671,7 @@ class Host:
         else:
             text = f"{min(999, seconds):3d}".encode("ascii")
             unit = UNIT_NONE
-        lib.apl_hmi_digits_brightness_set(hmi, 1 if self.panel_light else 0)
+        lib.apl_hmi_digits_brightness_set(hmi, LAMP_FULL if power_on and self.panel_light else 0)
         lib.apl_hmi_digits_content_set(hmi, text)
         lib.apl_hmi_digits_unit_set(hmi, unit)
         lib.apl_hmi_ambient_brightness_set(hmi, 0)
@@ -760,8 +768,11 @@ class Host:
     def _key_seg(self, key: int) -> Seg:
         label = f"[{key + 1}{KEY_LABEL[key]}]"
         held = self.down[key]
-        if held or self.lamp(key):
+        level = self.lamp(key)
+        if held or level >= LAMP_FULL:
             return Seg(label, "1;37")
+        if level > 0:
+            return Seg(label, "37")
         return Seg(label, "2;90")
 
     def _load_lines(self) -> list[str]:
@@ -882,9 +893,23 @@ def self_test() -> None:
     if host.power() != POWER_OFF or host.gear() != GEAR_2 or host.timer() != 0 or host.locked():
         raise AssertionError("初始状态不是关机、二档、无定时、无童锁")
     assert_boxes(host)
+    text, _unit, bright = host.digits()
+    if host.lib.apl_hmi_powerup_lamp_get(host.hmi) != 1 or host.lamp(KEY_POWER) != LAMP_FULL:
+        raise AssertionError("上电没有全灯")
+    if text != "888" or bright != LAMP_FULL:
+        raise AssertionError((text, bright))
+    host.step(POWERUP_TICKS - 1)
+    if host.lib.apl_hmi_powerup_lamp_get(host.hmi) != 1 or host.lamp(KEY_POWER) != LAMP_FULL:
+        raise AssertionError("2 秒内全灯被提前熄灭")
+    host.step(1)
+    text, _unit, bright = host.digits()
+    if host.lib.apl_hmi_powerup_lamp_get(host.hmi) != 0 or host.lamp(KEY_POWER) != LAMP_HALF:
+        raise AssertionError("2 秒后电源键不是半亮")
+    if host.lamp(KEY_SPEED) != 0 or text != "   " or bright != 0:
+        raise AssertionError("2 秒后其余灯没有熄灭")
 
     tap(host, KEY_POWER)
-    if host.power() != POWER_ON or host.gear() != GEAR_2 or host.lamp(KEY_POWER) != 1:
+    if host.power() != POWER_ON or host.gear() != GEAR_2 or host.lamp(KEY_POWER) != LAMP_FULL:
         raise AssertionError("电源短按没有开机")
     tap(host, KEY_SPEED)
     if host.gear() != GEAR_3:
@@ -932,14 +957,14 @@ def self_test() -> None:
     host.step(100)
     if host.power() != POWER_OFF or host.timer() != 0 or host.locked():
         raise AssertionError("定时到没有关机并清童锁")
-    if host.lamp(KEY_POWER) != 0:
-        raise AssertionError("关机后电源灯还亮")
+    if host.lamp(KEY_POWER) != LAMP_HALF:
+        raise AssertionError("关机后电源键不是半亮")
 
     host.triggers = 0
     host.recovers = 0
     host.reset()
     host.water = 2
-    host.step(1)
+    host.step(POWERUP_TICKS)
     if host.triggers or host.recovers:
         raise AssertionError("第一拍水位不该发边沿")
     host.water = 0

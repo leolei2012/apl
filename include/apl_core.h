@@ -2,7 +2,7 @@
  * @file    apl_core.h
  * @brief   主控对象。业务判断与执行器决定，库内不创建实例。
  *
- * 编译时把 `config` 加入头文件搜索路径，以便包含 `apl_config.h`。
+ * 编译时把 `config` 加入头文件搜索路径，以便包含 `apl_core_config.h`。
  * 整机状态、开关、档位和水位段数在 `apl_type.h`。
  * 宿主与主控交换数据只走本头的 getter、setter，以及初始化时注入的 ops。
  * `struct apl_core` 里的字节只给使用方分配实例。
@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 
-#include "apl_config.h"
+#include "apl_core_config.h"
 #include "apl_type.h"
 
 #define APL_CORE_VERSION_MAJOR  0

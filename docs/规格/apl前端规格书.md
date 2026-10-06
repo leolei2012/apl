@@ -17,7 +17,7 @@
 
 本文定义库对象 `struct apl_hmi` 的职责，以及它与 `struct apl_core` 之间的数据边界。
 
-本仓库是库，库内不创建实例。使用方持有 `struct apl`，人机是其中的 `struct apl_hmi`。人机对象不包含 `apl_core`，也不读取主控的 [`config/apl_config.h`](../../config/apl_config.h)。人机自己的编译控制和默认值在 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)。`apl_init` 与 `apl_tick` 在 `src/apl.c`。
+本仓库是库，库内不创建实例。使用方持有 `struct apl`，人机是其中的 `struct apl_hmi`。人机对象不包含 `apl_core`，也不读取主控的 [`config/apl_core_config.h`](../../config/apl_core_config.h)。人机自己的编译控制和默认值在 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)。`apl_init` 与 `apl_tick` 在 `src/apl.c`。
 
 空气净化与加湿是否启用由主控的动态配置决定。人机按快照绘制：动态配置未启用或未编译的功能不画。
 
@@ -61,7 +61,7 @@ core → link_snapshot → hmi → 屏 / 灯
 3. 快照标明某项功能未启用时，人机不绘制该项的图标、数值和操作入口。
 4. 同一套界面逻辑覆盖全部动态配置。画不画净化、加湿，只看快照。
 
-按键电平由宿主在 `apl_hmi_init` 注入的 `key_state_get` 一次给出六颗键。使用方每 10 ms 调用 `apl_tick`，其中再调用 `apl_hmi_tick`。短按在松开时发出，按下满 3 秒发出长按，同一次按下不重复。宿主和人机交换显示、童锁、启用标志和键回调时走 getter 和 setter。童锁、组合键和对象属性见 [HMI Datasheet](./datasheet.md)。
+按键电平由宿主在 `apl_hmi_init` 注入的 `key_state_get` 一次给出六颗键。`apl_hmi_init` 让已编入的灯和三位数字管全亮，数字为 888；200 拍后熄灭，电源键半亮。使用方每 10 ms 调用 `apl_tick`，其中再调用 `apl_hmi_tick`。全亮阶段 `apl_hmi_powerup_lamp_get` 返回 1，使用方不要覆盖这些灯。短按在松开时发出，按下满 3 秒发出长按，同一次按下不重复。宿主和人机交换显示、童锁、启用标志和键回调时走 getter 和 setter。童锁、组合键和对象属性见 [HMI Datasheet](./datasheet.md)。
 
 命令的具体种类、快照字段、字节协议和断连表现待定。确定后记入本文第 5、6 节，并与后端规格书保持同一份定义。
 
@@ -69,7 +69,7 @@ core → link_snapshot → hmi → 屏 / 灯
 
 ## 4. 配置
 
-[`config/apl_hmi_config.h`](../../config/apl_hmi_config.h) 只做人机的编译控制和默认值。主控的 `apl_config.h` 不包含面板。
+[`config/apl_hmi_config.h`](../../config/apl_hmi_config.h) 只做人机的编译控制和默认值。主控的 `apl_core_config.h` 不包含面板。
 
 ### 4.1 编译控制
 
@@ -89,7 +89,7 @@ core → link_snapshot → hmi → 屏 / 灯
 
 ### 4.2 默认值
 
-人机本地行为的默认值放在这个头文件。目标湿度、档位等业务默认值放在主控的 `apl_config.h`。当前尚无已确认的人机默认值。
+人机本地行为的默认值放在这个头文件。目标湿度、档位等业务默认值放在主控的 `apl_core_config.h`。当前尚无已确认的人机默认值。
 
 ---
 

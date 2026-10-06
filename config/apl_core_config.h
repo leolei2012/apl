@@ -1,10 +1,10 @@
 /**
- * @file    apl_config.h
+ * @file    apl_core_config.h
  * @brief   编译控制与默认值。运行中改过的配置以动态配置为准，不回读本文件。
  */
 
-#ifndef APL_CONFIG_H
-#define APL_CONFIG_H
+#ifndef APL_CORE_CONFIG_H
+#define APL_CORE_CONFIG_H
 
 /*
  * 编译控制：决定对应代码是否进入程序。未编译的功能，动态配置不能打开。
@@ -60,4 +60,4 @@
 #error "未编译加湿时，APL_DEFAULT_HUMIDIFY 必须为 0"
 #endif
 
-#endif /* APL_CONFIG_H */
+#endif /* APL_CORE_CONFIG_H */

@@ -15,10 +15,10 @@
 
 | 文件 | 用途 |
 |---|---|
-| [config/apl_config.h](./config/apl_config.h) | 主控的编译控制与默认值 |
+| [config/apl_core_config.h](./config/apl_core_config.h) | 主控的编译控制与默认值 |
 | [config/apl_hmi_config.h](./config/apl_hmi_config.h) | 人机的编译控制与默认值。`APL_HMI_PANEL` 选定面板，六颗键各自选配 |
 
-`apl_hmi` 不读取 `apl_config.h`。目标湿度、档位等业务默认值放在主控配置；背光等面板本地默认值放在人机配置。
+`apl_hmi` 不读取 `apl_core_config.h`。目标湿度、档位等业务默认值放在主控配置；背光等面板本地默认值放在人机配置。
 
 ## 文档
 
@@ -39,7 +39,7 @@
 | [include/apl.h](./include/apl.h) | `apl_init` 初始化两边，`apl_tick` 每 10 ms 先调用 `apl_core_tick`，再调用 `apl_hmi_tick` |
 | [include/apl_type.h](./include/apl_type.h) | `enum apl_power`、`enum apl_switch`、`enum apl_fan_gear`、`enum apl_water_level` |
 | [include/apl_core.h](./include/apl_core.h) | 开关机、定时、风机档位、两套滤网清零、水位边沿。状态通过 getter 和 setter 交换 |
-| [include/apl_hmi.h](./include/apl_hmi.h) | 六键短按/长按、童锁、组合键、灯和数码管。显示和童锁通过 getter 和 setter 交换 |
+| [include/apl_hmi.h](./include/apl_hmi.h) | 六键短按/长按、童锁、组合键、灯和数码管。上电全灯 2 秒后熄灭，电源键半亮。显示和童锁通过 getter 和 setter 交换 |
 
 编译时把头文件搜索路径指到 `include` 和 `config`。`tests/test_apl.c` 是宿主侧检查。
 

@@ -31,6 +31,19 @@
 
 #define APL_HMI_LONG_PRESS_TICKS    (APL_HMI_LONG_PRESS_MS / APL_HMI_TICK_MS)
 
+/** 上电后全灯保持的时间。 */
+#define APL_HMI_POWERUP_LAMP_MS     2000u
+/** 上电全灯的拍数。2 秒在 10 ms 拍上是 200 拍。 */
+#define APL_HMI_POWERUP_LAMP_TICKS  200u
+
+/**
+ * 上电全亮。亮度取值范围尚未规定，库仍不夹取其他写入。
+ * 255 只作为这次全亮，128 是它的半亮。
+ */
+#define APL_HMI_LAMP_FULL           255u
+/** 电源键在上电全亮结束之后的半亮。 */
+#define APL_HMI_LAMP_HALF           128u
+
 /** 数码管位数。内容不是段码，也不保证以 '\\0' 结尾。 */
 #define APL_HMI_DIGIT_COUNT         3u
 
@@ -122,6 +135,8 @@ struct apl_hmi
  *
  * 净化、加湿启用标志初始为 1。使用方随后用 setter 按快照改写。
  * 童锁初始为关。键回调初始为空，使用方调用 apl_hmi_key_callback_set。
+ * 上电后已编入的键灯、氛围灯、四段水位灯和三位数字管全亮，
+ * 数字为 888。APL_HMI_POWERUP_LAMP_TICKS 拍之后这些灯熄灭，电源键半亮。
  */
 void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx);
 
@@ -135,6 +150,15 @@ void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx
  * 不要在回调里再调用 apl_hmi_tick。
  */
 void apl_hmi_tick(struct apl_hmi *self);
+
+/**
+ * @brief 上电全灯是否还在亮
+ * @param self 人机对象
+ * @return 1 表示全灯阶段尚未结束。self 为空或 2 秒已到时返回 0
+ *
+ * 为 1 时，本拍会重新写成全亮。使用方这时不要再用 setter 覆盖这些灯。
+ */
+uint8_t apl_hmi_powerup_lamp_get(const struct apl_hmi *self);
 
 /**
  * @brief 写入一颗键灯的亮度

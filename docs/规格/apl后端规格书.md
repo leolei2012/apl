@@ -19,7 +19,7 @@
 
 本仓库是库，库内不创建实例。使用方持有一份 `struct apl`。`src/apl.c` 在里面放 `struct apl_core` 和 `struct apl_hmi`，并完成初始化和按拍推进。两个对象互不包含、也不互相包含头文件，通过 `link_command` 和 `link_snapshot` 交换数据。
 
-一套主控逻辑，运行中可动态配置。空气净化与加湿是否启用写在 `apl_core` 的动态配置里，不在编译期分成机型。`config/apl_config.h` 只提供编译控制和默认值。
+一套主控逻辑，运行中可动态配置。空气净化与加湿是否启用写在 `apl_core` 的动态配置里，不在编译期分成机型。`config/apl_core_config.h` 只提供编译控制和默认值。
 
 主控负责：
 
@@ -95,7 +95,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 ## 4. 配置
 
-[`config/apl_config.h`](../../config/apl_config.h) 只做主控的编译控制和默认值。面板裁剪在人机自己的 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)，不写进本文件。本机当前启用哪些功能，以动态配置为准。没有动态配置时，用头文件里的默认值建立第一份。
+[`config/apl_core_config.h`](../../config/apl_core_config.h) 只做主控的编译控制和默认值。面板裁剪在人机自己的 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)，不写进本文件。本机当前启用哪些功能，以动态配置为准。没有动态配置时，用头文件里的默认值建立第一份。
 
 ### 4.1 编译控制
 

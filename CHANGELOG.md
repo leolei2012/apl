@@ -11,6 +11,8 @@
 
 ### Changed
 
+- 主控配置头由 `config/apl_config.h` 改名为 `config/apl_core_config.h`。宏名不变。人机仍不包含它。
+- 上电后已编入的键灯、氛围灯、四段水位灯和三位数字管全亮 2 秒，数字为 888，然后熄灭，电源键半亮。全亮是 255，半亮是 128。`apl_hmi_powerup_lamp_get` 在这 2 秒内返回 1。
 - 仿真器目录由 `emulator` 改名为 `simulator`。
 - 六颗按键改为各自选配。`APL_HMI_COMPILE_KEY_PURIFY`、`APL_HMI_COMPILE_KEY_HUMIDITY`、`APL_HMI_COMPILE_KEY_TIMER`、`APL_HMI_COMPILE_KEY_LIGHT`、`APL_HMI_COMPILE_KEY_SPEED`、`APL_HMI_COMPILE_KEY_POWER` 默认都是 1。未编入的键不认短按、长按和组合，键灯读写视为非法。键编号和六路采样结构不变。
 - 整机状态、UV 与负离子开关、风机档位、水位段数改到 `include/apl_type.h`。`apl_core.h` 包含这份枚举。人机的按键、单位和童锁仍在 `apl_hmi.h`。
@@ -30,7 +32,7 @@
 - `apl_hmi` 实现：`include/apl_hmi.h`、`src/apl_hmi.c`。六键短按和 3 秒长按、童锁、组合键登记。显示属性由使用方通过 setter 写入。
 - `tests/test_apl.c`：宿主侧检查上述行为。净化单开、加湿单开、两项都开三种编译都能过。
 - 库目录 `apl_core`、`apl_hmi`。对外两个对象：`struct apl_core`、`struct apl_hmi`。库内不创建实例。
-- `config/apl_config.h`：主控编译控制与默认值。`APL_COMPILE_PURIFY`、`APL_COMPILE_HUMIDIFY` 决定功能是否编入；`APL_DEFAULT_PURIFY`、`APL_DEFAULT_HUMIDIFY` 是尚无动态配置时的初始启用。
+- `config/apl_core_config.h`：主控编译控制与默认值。`APL_COMPILE_PURIFY`、`APL_COMPILE_HUMIDIFY` 决定功能是否编入；`APL_DEFAULT_PURIFY`、`APL_DEFAULT_HUMIDIFY` 是尚无动态配置时的初始启用。
 - `config/apl_hmi_config.h`：人机编译控制与默认值。`APL_HMI_PANEL` 在编译期选定面板。
 - 规格草稿：`docs/规格/apl后端规格书.md`、`docs/规格/apl前端规格书.md`。
 - `docs/规格/datasheet.md`：人机对象数据手册。六个按键各带一盏键灯和对应回调；灯有亮度，氛围灯另有 RGB，三位数字管只描述显示内容。

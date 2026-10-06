@@ -463,6 +463,7 @@ static void test_hmi(void)
     EXPECT(-1 == apl_hmi_combo_set(NULL, pair, 2u, 100u, on_combo, &host));
 
     apl_hmi_init(&hmi, &ops, &host);
+    hmi_ticks(&hmi, APL_HMI_POWERUP_LAMP_TICKS);
     EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_child_lock_get(&hmi));
     EXPECT(1u == apl_hmi_purify_enabled_get(&hmi));
     EXPECT(1u == apl_hmi_humidify_enabled_get(&hmi));
@@ -850,11 +851,57 @@ static void test_compose(void)
     EXPECT(0 == core_host.anion_set);
 }
 
+static void test_powerup_lamps(void)
+{
+    struct apl_hmi hmi;
+    struct hmi_host host;
+    struct apl_hmi_ops ops;
+    char digits[APL_HMI_DIGIT_COUNT];
+    uint8_t index;
+
+    ops.key_state_get = key_state_get;
+    clear_counts(&host);
+    release_all(&host);
+    apl_hmi_init(&hmi, &ops, &host);
+
+    EXPECT(1u == apl_hmi_powerup_lamp_get(&hmi));
+    EXPECT(0u == apl_hmi_powerup_lamp_get(NULL));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_POWER));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_SPEED));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_ambient_brightness_get(&hmi));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_water_lamp_get(&hmi, 1u));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_water_lamp_get(&hmi, 4u));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_digits_brightness_get(&hmi));
+    apl_hmi_digits_content_get(&hmi, digits);
+    EXPECT(('8' == digits[0]) && ('8' == digits[1]) && ('8' == digits[2]));
+
+    hmi_ticks(&hmi, APL_HMI_POWERUP_LAMP_TICKS - 1u);
+    EXPECT(1u == apl_hmi_powerup_lamp_get(&hmi));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_POWER));
+
+    apl_hmi_tick(&hmi);
+    EXPECT(0u == apl_hmi_powerup_lamp_get(&hmi));
+    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_POWER));
+    EXPECT(0u == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_SPEED));
+    EXPECT(0u == apl_hmi_ambient_brightness_get(&hmi));
+    EXPECT(0u == apl_hmi_digits_brightness_get(&hmi));
+    for (index = 1u; index <= APL_HMI_WATER_LAMP_COUNT; index++)
+    {
+        EXPECT(0u == apl_hmi_water_lamp_get(&hmi, index));
+    }
+    apl_hmi_digits_content_get(&hmi, digits);
+    EXPECT((' ' == digits[0]) && (' ' == digits[1]) && (' ' == digits[2]));
+
+    apl_hmi_tick(&hmi);
+    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_key_lamp_get(&hmi, APL_HMI_KEY_POWER));
+}
+
 int main(void)
 {
     test_core();
     test_hmi();
     test_compose();
+    test_powerup_lamps();
     if (0 != g_failed)
     {
         printf("%d failed\n", g_failed);

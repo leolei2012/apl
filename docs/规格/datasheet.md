@@ -116,7 +116,7 @@ struct apl_hmi
 
 上图是属性模型。键灯和回调按 `enum apl_hmi_key_id` 访问，水位灯按段号 1 到 4 访问。方法以 `apl_hmi_` 为前缀，`self` 为第一个参数。库内不放 `static struct apl_hmi`。
 
-`apl_hmi` 不包含 `apl_core`，也不读取 `config/apl_config.h`。净化、加湿是否出现，看主控快照。快照里未启用的功能，对应键不产生命令，对应键灯亮度为 0。
+`apl_hmi` 不包含 `apl_core`，也不读取 `config/apl_core_config.h`。净化、加湿是否出现，看主控快照。快照里未启用的功能，对应键不产生命令，对应键灯亮度为 0。
 
 按键认出短按或长按后，调用该键对应的回调，并把 `self` 和 `ctx` 传入。人机不在回调里判断业务。使用方在回调里决定是否形成 `link_command`，或改这台人机上的灯。
 
@@ -133,6 +133,8 @@ struct apl_hmi
 ## 3. 配置
 
 面板在编译期由 `APL_HMI_PANEL` 选定。换面板仍是这一个对象，使用方的实例不变。六颗键各自用 `APL_HMI_COMPILE_KEY_*` 决定是否编入，默认都编入。未编入的键不认手势，键灯保持灭，也不能参加组合键。
+
+上电（`apl_hmi_init`）后，已编入的键灯、氛围灯、四段水位灯和三位数字管以 `APL_HMI_LAMP_FULL`（255）全亮，数字为 `888`。氛围灯颜色不变。之后每拍由 `apl_hmi_tick` 维持。满 `APL_HMI_POWERUP_LAMP_TICKS`（200 拍，2 秒）后这些灯熄灭，数字清空，电源键留在 `APL_HMI_LAMP_HALF`（128）。未编入的键不点亮。净化或加湿未启用时，对应键灯在全亮阶段也被保持为 0。`apl_hmi_powerup_lamp_get` 在这 2 秒内返回 1，使用方这时不要覆盖这些灯。
 
 当前这块圆形面板尚未在 `apl_hmi_config.h` 里登记，默认标识是 `APL_HMI_PANEL_UNSPECIFIED`。现在的实现就是这一对象，不另挂面板编号。人机本地默认值（例如各灯的初始亮度）确定后写入该头文件。
 

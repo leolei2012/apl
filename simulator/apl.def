@@ -18,6 +18,7 @@ EXPORTS
     apl_core_humidify_enabled_get
     apl_hmi_init
     apl_hmi_tick
+    apl_hmi_powerup_lamp_get
     apl_hmi_key_lamp_set
     apl_hmi_key_lamp_get
     apl_hmi_key_callback_set

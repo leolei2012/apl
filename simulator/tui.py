@@ -177,7 +177,15 @@ class Panel:
         labels = ("Purify", "Humidity", "Timer", "Light", "Speed", "Power")
         subtitles = ("Wifi (3s)", "Clean (3s)", "Lock (3s)", "", "Turbo (3s)", "Stop dry (3s)")
         for key, (x,y) in enumerate(positions):
-            style = "1;30;46" if h.down[key] else ("1;37;40" if h.lamp(key) else "90;40")
+            level = h.lamp(key)
+            if h.down[key]:
+                style = "1;30;46"
+            elif level >= apl.LAMP_FULL:
+                style = "1;37;40"
+            elif level > 0:
+                style = "38;5;245;40"
+            else:
+                style = "90;40"
             put(x,y+2,f"{key+1} {labels[key]}",style)
             put(x,y+3,subtitles[key],"90;40")
             for row in range(5):
