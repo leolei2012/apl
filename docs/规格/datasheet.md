@@ -91,9 +91,17 @@ void on_long(struct apl_hmi *self, void *ctx);
 
 同一时刻一个单位。显示哪一位、哪一个单位，由使用方按主控快照调用 `apl_hmi_digits_brightness_set`、`apl_hmi_digits_content_set`、`apl_hmi_digits_unit_set` 写入。内容恰好三位，不要求以 `\0` 结尾。读取用对应的 get。
 
-### 1.6 水位灯
+### 1.6 状态图标
 
-底部中间是四段水位灯，由低到高为第 1 段到第 4 段。每段是一盏灯，有自己的亮度。使用方用 `apl_hmi_water_lamp_set`、`apl_hmi_water_lamp_get` 按段号 1 到 4 读写。点亮段数与 `apl_core` 的水位一致：0 全灭，1 到 4 从最低段往上点亮。只净化时这四段不显示。
+中间和底部的符号各是一盏灯，有亮度，用 `apl_hmi_icon_set`、`apl_hmi_icon_get` 按 `enum apl_hmi_icon` 读写：Wi-Fi、滤网白、滤网红、童锁、负离子、UV、恒湿、风干、Sleep、一档、二档、三档、Auto。上电全亮阶段这些图标也全亮。
+
+### 1.7 蜂鸣器
+
+蜂鸣器由宿主在 `struct apl_hmi_ops` 的 `buzzer_set` 开关。`apl_hmi_buzzer_play` 给出声数、响和停的毫秒数，`apl_hmi_tick` 推进。`apl_hmi_init` 后响一声。
+
+### 1.8 水位灯
+
+底部中间是四段水位灯，由低到高为第 1 段到第 4 段。每段是一盏灯，有自己的亮度。使用方用 `apl_hmi_water_lamp_set`、`apl_hmi_water_lamp_get` 按段号 1 到 4 读写。点亮段数与 `apl_core` 的水位一致：0 全灭，1 到 4 从最低段往上点亮。只净化时这四段不显示。四段共用一个颜色，绿或橙，用 `apl_hmi_water_color_set`、`apl_hmi_water_color_get` 读写。
 
 ---
 
@@ -110,7 +118,9 @@ struct apl_hmi
 ├── key_speed
 ├── key_power        短按电源，长按结束风干
 ├── ambient          空气质量灯条：亮度 + RGB
-├── water_1 … water_4 四段水位灯，由低到高
+├── water_1 … water_4 四段水位灯，由低到高，共用颜色
+├── icon[13]         状态图标
+├── buzzer           提示音
 └── digits           亮度 + 三位内容 + 单位
 ```
 
@@ -142,8 +152,6 @@ struct apl_hmi
 
 ## 4. 尚未写入
 
-- 中间其余符号（Wi-Fi、滤网、锁、波浪、档位条等）哪些要建成灯对象。UV 与负离子的开关在 `apl_core`，只有开和关；面板上是否各做一盏指示灯，尚未规定。
-- Clean、Turbo 如何呈现。
+- Clean（加湿键长按）在面板逻辑里用作一体机恒湿设置；Turbo 的图标呈现尚未规定。
 - 亮度与颜色分量的取值范围，以及默认亮度。
-- Light 键调节哪些灯。
-- `link_command` 与 `link_snapshot` 的字段，以及快照如何写到上述属性上。
+- 快照如何写到上述属性上见前端规格书第 6 节。

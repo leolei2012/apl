@@ -9,6 +9,7 @@
 #include "apl.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static int g_failed;
 
@@ -168,6 +169,7 @@ static void test_core(void)
     host.timer_at_off = 99u;
     host.core = &core;
 
+    memset(&ops, 0, sizeof(ops));
     ops.water_level_get = water_level_get;
     ops.pm25_get = pm25_get;
     ops.humidity_get = humidity_get;
@@ -185,7 +187,7 @@ static void test_core(void)
     apl_core_timer_set(NULL, 1u, on_timer_off, &host);
     EXPECT(0u == apl_core_timer_get(NULL));
     EXPECT(APL_POWER_OFF == apl_core_power_get(NULL));
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(NULL));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(NULL));
     apl_core_fan_gear_set(NULL, APL_FAN_GEAR_1);
 #if APL_COMPILE_PURIFY
     EXPECT(0u == apl_core_filter_purify_get(NULL));
@@ -199,7 +201,7 @@ static void test_core(void)
 
     apl_core_init(&core, &ops, &host);
     EXPECT(APL_POWER_OFF == apl_core_power_get(&core));
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&core));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(&core));
 #if APL_COMPILE_PURIFY
     EXPECT((uint8_t)APL_DEFAULT_PURIFY == apl_core_purify_enabled_get(&core));
     /* 除重置外没有写入方法，这里只核对初始为 0，重置后仍为 0。 */
@@ -302,7 +304,8 @@ static void test_core(void)
 
     EXPECT(0 == host.uv_set);
     EXPECT(0 == host.anion_set);
-    EXPECT(0 == host.pm_get);
+    /* 运行中每秒读一次 PM2.5，只在编入净化时。 */
+    EXPECT((0u != APL_COMPILE_PURIFY) == (0 < host.pm_get));
 
     apl_core_init(&core, NULL, NULL);
     apl_core_power_on(&core);
@@ -454,6 +457,7 @@ static void test_hmi(void)
     enum apl_hmi_key_id one[1];
     enum apl_hmi_key_id bad[2];
 
+    memset(&ops, 0, sizeof(ops));
     ops.key_state_get = key_state_get;
     clear_counts(&host);
     release_all(&host);
@@ -800,6 +804,7 @@ static void test_compose(void)
     core_host.timer_at_off = 99u;
     core_host.core = &machine.core;
 
+    memset(&core_ops, 0, sizeof(core_ops));
     core_ops.water_level_get = water_level_get;
     core_ops.pm25_get = pm25_get;
     core_ops.humidity_get = humidity_get;
@@ -810,6 +815,7 @@ static void test_compose(void)
     core_ops.anion_set = anion_set;
     core_ops.on_power_off = on_power_off;
 
+    memset(&hmi_ops, 0, sizeof(hmi_ops));
     hmi_ops.key_state_get = key_state_get;
     clear_counts(&hmi_host);
     release_all(&hmi_host);
@@ -819,7 +825,7 @@ static void test_compose(void)
 
     apl_init(&machine, &core_ops, &core_host, &hmi_ops, &hmi_host);
     EXPECT(APL_POWER_OFF == apl_core_power_get(&machine.core));
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(&machine.core));
     EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_child_lock_get(&machine.hmi));
     EXPECT(0 == core_host.trigger);
     EXPECT(0 == core_host.pm_get);
@@ -859,6 +865,7 @@ static void test_powerup_lamps(void)
     char digits[APL_HMI_DIGIT_COUNT];
     uint8_t index;
 
+    memset(&ops, 0, sizeof(ops));
     ops.key_state_get = key_state_get;
     clear_counts(&host);
     release_all(&host);

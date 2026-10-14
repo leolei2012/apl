@@ -30,18 +30,18 @@
 | [docs/规格/datasheet.md](./docs/规格/datasheet.md) | 人机对象：六个按键及键下灯、氛围灯、数码管 |
 | [simulator/README.md](./simulator/README.md) | Qt 仿真台。外壳是 Widgets，中间的面贴是 QML |
 
-规格书仍是草稿。`link_command`、`link_snapshot` 的字段，以及净化、加湿内部如何输出，尚未规定，库里也还没有这些逻辑。
+规格书仍是草稿。`link_command`、`link_snapshot` 的字段见后端规格书第 3.2 节；净化、加湿、风干、缺水、滤网、产测等业务按《机型交互逻辑（Excel提炼）》实现，原表冲突处的取舍列在前后端规格书的「待确认」一节。故障策略和动态配置的修改入口尚未规定。
 
 已实现的接口：
 
 | 文件 | 内容 |
 |---|---|
 | [include/apl.h](./include/apl.h) | `apl_init` 初始化两边，`apl_tick` 每 10 ms 先调用 `apl_core_tick`，再调用 `apl_hmi_tick` |
-| [include/apl_type.h](./include/apl_type.h) | `enum apl_power`、`enum apl_switch`、`enum apl_fan_gear`、`enum apl_water_level` |
-| [include/apl_core.h](./include/apl_core.h) | 开关机、定时、风机档位、两套滤网清零、水位边沿。状态通过 getter 和 setter 交换 |
-| [include/apl_hmi.h](./include/apl_hmi.h) | 六键短按/长按、童锁、组合键、灯和数码管。上电全灯 2 秒后熄灭，电源键半亮。显示和童锁通过 getter 和 setter 交换 |
+| [include/apl_type.h](./include/apl_type.h) | 主控和人机共用的枚举，以及 `struct apl_link_command`、`struct apl_link_snapshot`、`struct apl_core_memory` |
+| [include/apl_core.h](./include/apl_core.h) | 运行四态、风干、定时、风机与自动/恒湿、净化与 UV 联锁、加湿与缺水、滤网、Wi-Fi、产测、掉电记忆；`apl_core_command`、`apl_core_snapshot_get` |
+| [include/apl_hmi.h](./include/apl_hmi.h) | 六键短按/长按、童锁、组合键、键灯、状态图标、水位灯与颜色、氛围灯、数码管、蜂鸣器；接上 link 后的面板逻辑。上电全灯 2 秒后熄灭，电源键半亮 |
 
-编译时把头文件搜索路径指到 `include` 和 `config`。`tests/test_apl.c` 是宿主侧检查。
+编译时把头文件搜索路径指到 `include` 和 `config`。`tests/test_apl.c`、`tests/test_link.c`、`tests/test_hmi_key_optional.c` 是宿主侧检查，命令写在各文件头。
 
 [simulator](./simulator/README.md) 是 Qt 仿真台。它持有一份 `struct apl` 并每 10 ms 调用 `apl_tick`。外壳是 Widgets，顶部是菜单栏。左侧切换前端，右侧是传感器、负载和状态。中间的面贴是 QML。前端只读 getter、只上报按键电平。库还没有的业务，仿真台不另外实现。编译和启动见 [使用说明](./simulator/使用说明.md)，接线见 [设计说明](./simulator/设计说明.md)。
 
