@@ -28,6 +28,7 @@
 | [docs/规格/apl后端规格书.md](./docs/规格/apl后端规格书.md) | `apl_core` |
 | [docs/规格/apl前端规格书.md](./docs/规格/apl前端规格书.md) | `apl_hmi` |
 | [docs/规格/datasheet.md](./docs/规格/datasheet.md) | 人机对象：六个按键及键下灯、氛围灯、数码管 |
+| [docs/规格/机型交互逻辑（Excel提炼）.md](./docs/规格/机型交互逻辑（Excel提炼）.md) | 产品 HMI Excel 的三机型交互逻辑转写，含待确认项 |
 | [simulator/README.md](./simulator/README.md) | Qt 仿真台。外壳是 Widgets，中间的面贴是 QML |
 
 规格书仍是草稿。`link_command`、`link_snapshot` 的字段，以及净化、加湿内部如何输出，尚未规定，库里也还没有这些逻辑。
