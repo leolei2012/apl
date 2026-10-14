@@ -28,7 +28,7 @@
 | [docs/规格/apl后端规格书.md](./docs/规格/apl后端规格书.md) | `apl_core` |
 | [docs/规格/apl前端规格书.md](./docs/规格/apl前端规格书.md) | `apl_hmi` |
 | [docs/规格/datasheet.md](./docs/规格/datasheet.md) | 人机对象：六个按键及键下灯、氛围灯、数码管 |
-| [simulator/README.md](./simulator/README.md) | Windows 终端宿主。默认鼠标键盘面板，`--plain` 为纯键盘面板 |
+| [simulator/README.md](./simulator/README.md) | Qt 仿真台。外壳是 Widgets，中间的面贴是 QML |
 
 规格书仍是草稿。`link_command`、`link_snapshot` 的字段，以及净化、加湿内部如何输出，尚未规定，库里也还没有这些逻辑。
 
@@ -43,11 +43,6 @@
 
 编译时把头文件搜索路径指到 `include` 和 `config`。`tests/test_apl.c` 是宿主侧检查。
 
-[simulator](./simulator/README.md) 是另一名宿主。`simulator/panel_sim.py` 把库编成动态库后加载，自己持有一份 `struct apl`，注入按键电平和传感器，每 10 ms 调用 `apl_tick`。默认启动 `simulator/tui.py` 的鼠标键盘面板；`--plain` 仍是原来的纯键盘面板。画面从 getter 重画。库还没有的业务，仿真器不另外实现。操作和接线见 [使用说明](./simulator/使用说明.md)、[设计说明](./simulator/设计说明.md)。
+[simulator](./simulator/README.md) 是 Qt 仿真台。它持有一份 `struct apl` 并每 10 ms 调用 `apl_tick`。外壳是 Widgets，顶部是菜单栏。左侧切换前端，右侧是传感器、负载和状态。中间的面贴是 QML。前端只读 getter、只上报按键电平。库还没有的业务，仿真台不另外实现。编译和启动见 [使用说明](./simulator/使用说明.md)，接线见 [设计说明](./simulator/设计说明.md)。
 
-```powershell
-python simulator/panel_sim.py
-python simulator/panel_sim.py --plain
-python simulator/panel_sim.py --self-test
-python simulator/test_tui.py
-```
+Qt 仿真台仅用于测试本工程 APL，保留内置面板、传感器、固定负载、事件、供电和存储。说明见 [simulator 文档入口](simulator/README.md)。
