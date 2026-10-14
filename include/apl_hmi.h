@@ -3,7 +3,7 @@
  * @brief   人机对象。按键手势与显示属性，库内不创建实例。
  *
  * 编译时把 `config` 加入头文件搜索路径，以便包含 `apl_hmi_config.h`。
- * 本头不包含主控配置，也不包含 `apl_core`。
+ * 本头不包含主控配置，也不包含 `apl_core`。与主控共用的快照和命令类型在 `apl_type.h`。
  * 宿主与人机交换数据只走本头的 getter、setter，以及初始化时注入的 ops。
  * `struct apl_hmi` 里的字节只给使用方分配实例。
  * 短按、长按和组合键是回调，由 setter 绑定，不提供取出函数指针的 getter。
@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #include "apl_hmi_config.h"
+#include "apl_type.h"
 
 #define APL_HMI_VERSION_MAJOR   0
 #define APL_HMI_VERSION_MINOR   1
@@ -50,11 +51,19 @@
 /** 水位灯段数。apl_hmi_water_lamp_set 的序号从 1 到这个值。 */
 #define APL_HMI_WATER_LAMP_COUNT    4u
 
+/** 设置、查询、唤醒后无操作多久确认或熄屏。原表 3 秒。 */
+#define APL_HMI_IDLE_MS             3000u
+#define APL_HMI_IDLE_TICKS          (APL_HMI_IDLE_MS / APL_HMI_TICK_MS)
+
+/** 一体机湿度与 PM2.5 轮流显示的周期。原表 20 秒。 */
+#define APL_HMI_ROTATE_MS           20000u
+#define APL_HMI_ROTATE_TICKS        (APL_HMI_ROTATE_MS / APL_HMI_TICK_MS)
+
 /** 同时登记的组合键上限。具体组合尚未规定，库不预登记。 */
 #define APL_HMI_COMBO_MAX           4u
 
 /** 使用方按这个大小持有对象。布局不对外，读写都走 getter 和 setter。 */
-#define APL_HMI_OPAQUE_SIZE         512u
+#define APL_HMI_OPAQUE_SIZE         1024u
 
 struct apl_hmi;
 
@@ -95,6 +104,35 @@ enum apl_hmi_child_lock
     APL_HMI_CHILD_LOCK_ON
 };
 
+/**
+ * 状态图标。datasheet 第 4 节列为「哪些要建成灯对象」的中间符号，按指示灯与显示表建成。
+ * 每个图标一盏灯，只有亮度。
+ */
+enum apl_hmi_icon
+{
+    APL_HMI_ICON_WIFI = 0,
+    APL_HMI_ICON_FILTER_WHITE,   /**< 滤网正常 */
+    APL_HMI_ICON_FILTER_RED,     /**< 滤网到期 */
+    APL_HMI_ICON_LOCK,
+    APL_HMI_ICON_ANION,
+    APL_HMI_ICON_UV,
+    APL_HMI_ICON_HUMIDITY,       /**< 底部左侧恒湿图标 */
+    APL_HMI_ICON_DRY,            /**< 底部右侧风干图标 */
+    APL_HMI_ICON_GEAR_SLEEP,
+    APL_HMI_ICON_GEAR_1,
+    APL_HMI_ICON_GEAR_2,
+    APL_HMI_ICON_GEAR_3,
+    APL_HMI_ICON_GEAR_AUTO,
+    APL_HMI_ICON_COUNT
+};
+
+/** 水位灯颜色。四段共用一个颜色。 */
+enum apl_hmi_water_color
+{
+    APL_HMI_WATER_GREEN = 0,
+    APL_HMI_WATER_ORANGE
+};
+
 struct apl_hmi_key_state
 {
     enum apl_hmi_key_level purify;
@@ -112,7 +150,9 @@ struct apl_hmi_key_state
 struct apl_hmi_ops
 {
     void (*key_state_get)(struct apl_hmi_key_state *state, void *ctx);
+    void (*buzzer_set)(uint8_t on, void *ctx);  /**< 1 响，0 停。空则不发声 */
 };
+
 
 /** 占位对象。使用方声明它来持有实例，不读写 storage。 */
 struct apl_hmi
@@ -364,5 +404,94 @@ int apl_hmi_combo_set(struct apl_hmi *self,
                       uint16_t hold_ms,
                       void (*on_combo)(struct apl_hmi *self, void *ctx),
                       void *ctx);
+
+
+/**
+ * @brief 写入一个状态图标的亮度
+ * @param self 人机对象
+ * @param icon 图标编号。表外不改
+ * @param brightness 亮度。0 为灭
+ */
+void apl_hmi_icon_set(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brightness);
+
+/**
+ * @brief 读取一个状态图标的亮度
+ * @param self 人机对象
+ * @param icon 图标编号
+ * @return 亮度。self 为空或编号非法时返回 0
+ */
+uint8_t apl_hmi_icon_get(const struct apl_hmi *self, enum apl_hmi_icon icon);
+
+/**
+ * @brief 写入水位灯颜色
+ * @param self 人机对象
+ * @param color 绿或橙。其他值不改
+ */
+void apl_hmi_water_color_set(struct apl_hmi *self, enum apl_hmi_water_color color);
+
+/**
+ * @brief 读取水位灯颜色
+ * @param self 人机对象
+ * @return 当前颜色。self 为空时返回 APL_HMI_WATER_GREEN
+ */
+enum apl_hmi_water_color apl_hmi_water_color_get(const struct apl_hmi *self);
+
+/**
+ * @brief 播放一段提示音
+ * @param self 人机对象
+ * @param count 响几声。0 停止当前提示音
+ * @param on_ms 每声响多久。按拍向上取整
+ * @param off_ms 两声之间停多久
+ *
+ * 由 apl_hmi_tick 推进，经 ops 的 buzzer_set 开关蜂鸣器。新的一段打断旧的。
+ */
+void apl_hmi_buzzer_play(struct apl_hmi *self, uint8_t count, uint16_t on_ms, uint16_t off_ms);
+
+/**
+ * @brief 提示音是否还在播放
+ * @param self 人机对象
+ * @return 1 在播放。self 为空时返回 0
+ */
+uint8_t apl_hmi_buzzer_busy_get(const struct apl_hmi *self);
+
+/**
+ * @brief 接上面板逻辑：按键形成 link_command，显示按 link_snapshot 绘制
+ * @param self 人机对象
+ * @param send 交出操作。空指针则断开，回到只调用键回调的方式
+ * @param ctx 调用 send 时原样传回
+ *
+ * 接上后，六颗键的手势由库按前端规格书第 5 节转成操作，不再调用使用方的键回调；
+ * 同时登记两组组合键：定时 + 风速 3 秒为滤网重置，电源 + 定时 3 秒为产测。
+ * 灯光开关、首次触摸唤醒、定时和恒湿的设置预览、滤芯寿命查询留在人机本地。
+ * 屏、灯、水位、图标和提示音每拍按最近一份快照重画，使用方不要再用 setter 覆盖。
+ */
+void apl_hmi_link_bind(struct apl_hmi *self,
+                       enum apl_link_result (*send)(const struct apl_link_command *command,
+                                                    void *ctx),
+                       void *ctx);
+
+/**
+ * @brief 交入主控的最新快照
+ * @param self 人机对象
+ * @param snapshot 快照。空指针则不改
+ *
+ * 未接上面板逻辑时只记下，不绘制。接上后同时按快照写入净化、加湿启用标志。
+ */
+void apl_hmi_snapshot_set(struct apl_hmi *self, const struct apl_link_snapshot *snapshot);
+
+/**
+ * @brief 显示滤芯剩余寿命 3 秒
+ * @param self 人机对象
+ *
+ * 只查询，不改主控状态。当前面板没有单独的滤芯寿命键，由使用方决定入口。
+ */
+void apl_hmi_filter_query(struct apl_hmi *self);
+
+/**
+ * @brief 面板灯光是否开着
+ * @param self 人机对象
+ * @return 1 开，0 关。self 为空时返回 0
+ */
+uint8_t apl_hmi_light_get(const struct apl_hmi *self);
 
 #endif /* APL_HMI_H */

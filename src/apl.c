@@ -27,13 +27,33 @@ void apl_init(struct apl *self,
     apl_hmi_init(&self->hmi, hmi_ops, hmi_ctx);
 }
 
-void apl_tick(struct apl *self)
+/** 人机交出的操作原样交给主控。ctx 是主控对象。 */
+static enum apl_link_result apl_link_send(const struct apl_link_command *command, void *ctx)
+{
+    return apl_core_command((struct apl_core *)ctx, command);
+}
+
+void apl_link_bind(struct apl *self)
 {
     if (NULL == self)
     {
         return;
     }
 
+    apl_hmi_link_bind(&self->hmi, apl_link_send, &self->core);
+}
+
+void apl_tick(struct apl *self)
+{
+    struct apl_link_snapshot snapshot;
+
+    if (NULL == self)
+    {
+        return;
+    }
+
     apl_core_tick(&self->core);
+    apl_core_snapshot_get(&self->core, &snapshot);
+    apl_hmi_snapshot_set(&self->hmi, &snapshot);
     apl_hmi_tick(&self->hmi);
 }

@@ -10,6 +10,7 @@
 #include "apl.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static int g_failed;
 
@@ -100,6 +101,7 @@ int main(void)
     host.light_long = 0;
     host.speed_short = 0;
 
+    memset(&ops, 0, sizeof(ops));
     ops.key_state_get = key_state_get;
     apl_init(&machine, NULL, NULL, &ops, &host);
     apl_hmi_key_callback_set(&machine.hmi, APL_HMI_KEY_LIGHT, on_light_short, on_light_long, &host);

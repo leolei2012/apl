@@ -9,6 +9,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- `link_command`、`link_snapshot`：类型在 `apl_type.h`，`apl_core_command` 执行并拒绝未启用功能的命令，`apl_core_snapshot_get` 给出快照，`apl_link_bind` 把人机接到主控。
+- 主控业务：待机、运行、关机风干、产测四态；掉电记忆（`struct apl_core_memory`、`memory_save`、`apl_core_memory_restore`）；面板定时；极速停泵；睡眠；净化复合功能与 UV 联锁；多传感器空气质量与自动档；恒湿风速表与回差；缺水 30 分钟进风干；滤网寿命、重置与提示；Wi-Fi 配网；产测与恢复出厂设置。新增 ops：`pm10_get`、`hcho_get`、`tvoc_get`、`uv_interlock_get`、`fan_set`、`pump_set`、`memory_save`。
+- 人机资源：13 个状态图标、水位灯颜色、蜂鸣器（`buzzer_set`、`apl_hmi_buzzer_play`）；面板逻辑（按键到命令、灯光与首次触摸唤醒、定时与恒湿设置预览、滤芯查询、按快照绘制、提示音）。
+- `tests/test_link.c`：三种编译配置下检查上述行为。
+
+### Changed
+
+- 首次开机档位默认一档（`APL_DEFAULT_FAN_GEAR`）。
+- `APL_CORE_OPAQUE_SIZE` 改为 320，`APL_HMI_OPAQUE_SIZE` 改为 1024。
+- 滤网计数单位定为秒，只在运行中累计；运行中每秒读传感器。
+
 ### Removed
 
 - 通用外设、端口绑定、项目 JSON、C 动态库、编译器设置与 MCP 扩展。Qt 仿真台收回为 APL 专用调试工具。

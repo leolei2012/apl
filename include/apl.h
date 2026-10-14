@@ -46,9 +46,17 @@ void apl_init(struct apl *self,
  * @brief 推进一拍
  * @param self 组合对象。空指针则什么都不做
  *
- * 使用方每 APL_CORE_TICK_MS 调用一次。顺序是 apl_core_tick，然后 apl_hmi_tick。
- * 显示映射仍由使用方在这一拍之后用 getter 和 setter 完成。
+ * 使用方每 APL_CORE_TICK_MS 调用一次。顺序是 apl_core_tick，取主控快照交给人机，
+ * 然后 apl_hmi_tick。未调用 apl_link_bind 时，显示映射仍由使用方用 getter 和 setter 完成。
  */
 void apl_tick(struct apl *self);
+
+/**
+ * @brief 把人机的操作接到主控，并让人机按快照绘制
+ * @param self 组合对象。空指针则什么都不做
+ *
+ * 接上后六颗键不再调用使用方的键回调，见 apl_hmi_link_bind。
+ */
+void apl_link_bind(struct apl *self);
 
 #endif /* APL_H */
