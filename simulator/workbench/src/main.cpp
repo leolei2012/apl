@@ -38,6 +38,11 @@ namespace {
 void attachConsole()
 {
 #ifdef _WIN32
+    // Keep CTest's redirected diagnostics instead of reopening a separate console.
+    if (GetFileType(GetStdHandle(STD_ERROR_HANDLE)) == FILE_TYPE_PIPE)
+    {
+        return;
+    }
     if (!AttachConsole(ATTACH_PARENT_PROCESS))
     {
         AllocConsole();
@@ -196,12 +201,9 @@ bool selfTest(AplPlatform *platform)
         return false;
     }
 
-    if (platform->pmReads() != 0 || platform->uvCalls() != 0 || platform->anionCalls() != 0)
+    if (platform->purifyEnabled() && platform->pmReads() == 0)
     {
-        std::fprintf(stderr, "FAIL library called sensors %d %d %d\n",
-                     platform->pmReads(),
-                     platform->uvCalls(),
-                     platform->anionCalls());
+        std::fprintf(stderr, "FAIL running core did not sample PM2.5\n");
         return false;
     }
 
