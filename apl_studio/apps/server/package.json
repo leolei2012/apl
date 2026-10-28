@@ -1,0 +1,13 @@
+{
+  "name": "@apl-studio/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@apl-studio/api": "*",
+    "@apl-studio/product": "*",
+    "@apl-studio/templates": "*",
+    "cordis": "4.0.0-rc.8",
+    "@apl-studio/build": "*"
+  }
+}

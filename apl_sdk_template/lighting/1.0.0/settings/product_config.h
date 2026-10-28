@@ -1,0 +1,13 @@
+#ifndef PRODUCT_LIGHT_CONFIG_H
+#define PRODUCT_LIGHT_CONFIG_H
+#define LIGHT_TICK_MS 10
+#define LIGHT_BOOT_DELAY_MS 50
+#define LIGHT_DEFAULT_POWER 0
+#define LIGHT_DEFAULT_BRIGHTNESS 40
+#if LIGHT_TICK_MS != 10 || LIGHT_BOOT_DELAY_MS < 0 || LIGHT_BOOT_DELAY_MS > 5000 || LIGHT_BOOT_DELAY_MS % LIGHT_TICK_MS != 0
+#error "Invalid light timing configuration"
+#endif
+#if LIGHT_DEFAULT_BRIGHTNESS < 0 || LIGHT_DEFAULT_BRIGHTNESS > 100
+#error "Invalid default brightness"
+#endif
+#endif

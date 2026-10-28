@@ -10,15 +10,22 @@ Item {
     readonly property bool showAll: platform.supplied && platform.powerupShow
     readonly property bool displayOn: platform.supplied && platform.digitBrightness > 0
 
+    function iconOpacity(index) {
+        return platform.supplied && platform.iconLamps.length > index
+                ? 0.14 + 0.86 * platform.iconLamps[index] / 255 : 0.14
+    }
+
     // 矢量描线，避免 emoji 和系统字体导致图标外观不一致。
     component Icon: Canvas {
         property string kind: "power"
+        property color strokeColor: "#e9edef"
         width: 56; height: 56
         onKindChanged: requestPaint()
+        onStrokeColorChanged: requestPaint()
         onPaint: {
             const c = getContext("2d"); c.reset()
             c.scale(width / 64, height / 64)
-            c.strokeStyle = "#e9edef"; c.fillStyle = "#e9edef"
+            c.strokeStyle = strokeColor; c.fillStyle = strokeColor
             c.lineWidth = 2.8; c.lineCap = "round"; c.lineJoin = "round"
             function line(a,b,d,e) { c.beginPath(); c.moveTo(a,b); c.lineTo(d,e); c.stroke() }
             function circle(x,y,r) { c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.stroke() }
@@ -92,7 +99,7 @@ Item {
         onBrightnessChanged: requestPaint()
         onPaint: {
             const c=getContext("2d"); c.reset()
-            const maps={"0":63,"1":6,"2":91,"3":79,"4":102,"5":109,"6":125,"7":7,"8":127,"9":111,"-":64}
+            const maps={"0":63,"1":6,"2":91,"3":79,"4":102,"5":109,"6":125,"7":7,"8":127,"9":111,"-":64,"O":63,"F":113,"C":57,"L":56}
             const mask=maps[glyph]||0
             const segments=[
                 [[10,2],[53,2],[58,6],[52,10],[12,10],[6,6]],
@@ -178,12 +185,12 @@ Item {
         anchors.centerIn: parent
         scale: Math.max(0,Math.min(root.width,root.height)-20)/640
         Rectangle { anchors.fill: parent; radius: 320; color: "#020303"; border.color: "#353b3d"; border.width: 1 }
-        PanelKey { x: 270; y: 14; keyId: 0; iconName: "purify"; label: "Wifi(3s)"; description: "净化开关；长按配网（库尚未实现）" }
-        PanelKey { x: 44; y: 141; keyId: 1; iconName: "humidity"; label: "Humidity"; description: "加湿开关；长按自清洁（库尚未实现）" }
+        PanelKey { x: 270; y: 14; keyId: 0; iconName: "purify"; label: "Wifi(3s)"; description: "净化开关；长按 3 秒配网" }
+        PanelKey { x: 44; y: 141; keyId: 1; iconName: "humidity"; label: "Humidity"; description: "加湿开关；一体机长按 3 秒设置恒湿" }
         PanelKey { x: 496; y: 141; keyId: 2; iconName: "timer"; label: "Lock(3s)"; description: "短按定时；长按 3 秒切换童锁" }
-        PanelKey { x: 44; y: 404; keyId: 3; iconName: "light"; label: "Light"; description: "面板灯光开关；长按睡眠（库尚未实现）" }
+        PanelKey { x: 44; y: 404; keyId: 3; iconName: "light"; label: "Light"; description: "面板灯光开关；熄屏后首次触摸唤醒；长按 3 秒睡眠" }
         PanelKey { x: 496; y: 404; keyId: 4; iconName: "fan"; label: "Turbo(3s)"; description: "短按切换风速；长按 3 秒进入 Turbo" }
-        PanelKey { x: 270; y: 538; keyId: 5; iconName: "power"; description: "电源开关；童锁开启时锁定" }
+        PanelKey { x: 270; y: 538; keyId: 5; iconName: "power"; description: "电源开关；风干时短按重新开机，长按 3 秒结束风干；童锁开启时锁定" }
         Grid {
             x: 232; y: 193; columns: 15; rowSpacing: 7; columnSpacing: 6
             Repeater {
@@ -215,15 +222,15 @@ Item {
                 }
             }
         }
-        // 无库状态来源的符号保持暗印，仅全灯自检时点亮。
-        Icon { x: 151; y: 185; width: 34; height: 34; kind: "anion"; opacity: root.showAll ? 1 : 0.14 }
-        Icon { x: 151; y: 229; width: 34; height: 34; kind: "wifi"; opacity: root.showAll ? 1 : 0.14 }
-        Icon { x: 151; y: 273; width: 34; height: 34; kind: "filter"; opacity: root.showAll ? 1 : 0.14 }
-        Icon { x: 151; y: 317; width: 34; height: 34; kind: "lock"; opacity: root.showAll || (platform.supplied && platform.childLock) ? 1 : 0.14 }
+        // 图标亮度完全来自 APL HMI。
+        Icon { x: 151; y: 185; width: 34; height: 34; kind: "anion"; opacity: root.iconOpacity(4) }
+        Icon { x: 151; y: 229; width: 34; height: 34; kind: "wifi"; opacity: root.iconOpacity(0) }
+        Icon { x: 151; y: 273; width: 34; height: 34; kind: "filter"; strokeColor: platform.iconLamps.length>2 && platform.iconLamps[2]>0 ? "#ff6262" : "#e9edef"; opacity: Math.max(root.iconOpacity(1), root.iconOpacity(2)) }
+        Icon { x: 151; y: 317; width: 34; height: 34; kind: "lock"; opacity: root.iconOpacity(3) }
         Rectangle {
             x: 446; y: 194; width: 27; height: 27; radius: 14
             color: "transparent"; border.color: "#e9edef"; border.width: 2
-            opacity: root.showAll ? 1 : 0.14
+            opacity: root.iconOpacity(5)
             Text { anchors.centerIn: parent; text: "UV"; color: "#e9edef"; font.pixelSize: 12 }
         }
         Row {
@@ -235,7 +242,7 @@ Item {
                     required property string modelData
                     required property int index
                     width: 47; height: 38
-                    opacity: root.showAll || (root.displayOn && platform.powerOn && platform.gear===index) ? 1 : 0.16
+                    opacity: root.iconOpacity(8 + index)
                     Text {
                         anchors.centerIn: parent; visible: gearIndicator.index===0 || gearIndicator.index===4
                         text: gearIndicator.modelData; color: "#e9edef"; font.family: "Segoe UI"; font.pixelSize: 16
@@ -251,7 +258,7 @@ Item {
             x: 438; y: 406; text: "Turbo"; color: "#e9edef"; font.pixelSize: 12
             opacity: root.showAll || (root.displayOn && platform.powerOn && platform.gear===5) ? 1 : 0.12
         }
-        Icon { x: 151; y: 422; width: 35; height: 35; kind: "droplet"; opacity: root.showAll ? 1 : 0.14 }
+        Icon { x: 151; y: 422; width: 35; height: 35; kind: "droplet"; opacity: root.iconOpacity(6) }
         Row {
             x: 212; y: 438; spacing: 15
             Repeater {
@@ -260,17 +267,19 @@ Item {
                     required property int index
                     readonly property int brightness: platform.supplied && platform.waterLamps.length>index ? platform.waterLamps[index] : 0
                     width: 42; height: 10
+                    readonly property int waterColor: platform.waterColor
+                    onWaterColorChanged: requestPaint()
                     onBrightnessChanged: requestPaint()
                     onPaint: {
                         const c=getContext("2d"); c.reset()
                         c.globalAlpha=brightness>0 ? brightness/255 : 1
-                        c.fillStyle=brightness>0 ? "#f5f8fa" : "#15191b"
+                        c.fillStyle=brightness>0 ? (waterColor===1 ? "#ff9f43" : "#80e8ac") : "#15191b"
                         c.beginPath(); c.moveTo(6,1); c.lineTo(42,1)
                         c.lineTo(36,9); c.lineTo(0,9); c.closePath(); c.fill()
                     }
                 }
             }
         }
-        Icon { x: 449; y: 422; width: 35; height: 35; kind: "water"; opacity: root.showAll ? 1 : 0.35 }
+        Icon { x: 449; y: 422; width: 35; height: 35; kind: "water"; opacity: root.iconOpacity(7) }
     }
 }

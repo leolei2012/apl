@@ -279,39 +279,39 @@ static void apl_core_sensor_sample(struct apl_core_state *state)
     if (0u != apl_core_has_purify(state))
     {
         level = APL_AQ_EXCELLENT;
-        if (NULL != state->ops->pm25_get)
+        if (NULL != state->ops->get_pm25)
         {
-            state->pm25 = state->ops->pm25_get(state->ctx);
+            state->pm25 = state->ops->get_pm25(state->ctx);
             level = apl_core_aq_worse(level, apl_core_aq_grade(state->pm25, 35u, 75u, 150u));
         }
 
-        if (NULL != state->ops->pm10_get)
+        if (NULL != state->ops->get_pm10)
         {
             level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->pm10_get(state->ctx),
+                                      apl_core_aq_grade(state->ops->get_pm10(state->ctx),
                                                         40u, 70u, 150u));
         }
 
-        if (NULL != state->ops->hcho_get)
+        if (NULL != state->ops->get_hcho)
         {
             level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->hcho_get(state->ctx),
+                                      apl_core_aq_grade(state->ops->get_hcho(state->ctx),
                                                         50u, 50u, 80u));
         }
 
-        if (NULL != state->ops->tvoc_get)
+        if (NULL != state->ops->get_tvoc)
         {
             level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->tvoc_get(state->ctx),
+                                      apl_core_aq_grade(state->ops->get_tvoc(state->ctx),
                                                         300u, 500u, 1000u));
         }
 
         state->aq_level = level;
     }
 
-    if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops->humidity_get))
+    if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops->get_humidity))
     {
-        state->humidity = state->ops->humidity_get(state->ctx);
+        state->humidity = state->ops->get_humidity(state->ctx);
     }
 }
 
@@ -444,9 +444,9 @@ static void apl_core_outputs_update(struct apl_core *self)
             && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
 
     interlock = 1u;
-    if ((NULL != ops) && (NULL != ops->uv_interlock_get))
+    if ((NULL != ops) && (NULL != ops->get_uv_interlock))
     {
-        interlock = ops->uv_interlock_get(state->ctx);
+        interlock = ops->get_uv_interlock(state->ctx);
     }
 
     if ((APL_SWITCH_ON == state->uv) && (0u == interlock))
@@ -465,37 +465,37 @@ static void apl_core_outputs_update(struct apl_core *self)
         state->fan = fan;
         state->fan_output = output;
         /* 第一拍风机本来就停着，不必再发一次「关」。 */
-        if ((NULL != ops) && (NULL != ops->fan_set)
+        if ((NULL != ops) && (NULL != ops->set_fan)
             && ((0u != state->outputs_valid) || (APL_SWITCH_ON == fan)))
         {
-            ops->fan_set(fan, output, state->ctx);
+            ops->set_fan(fan, output, state->ctx);
         }
     }
 
     if (pump != state->pump)
     {
         state->pump = pump;
-        if ((NULL != ops) && (NULL != ops->pump_set))
+        if ((NULL != ops) && (NULL != ops->set_pump))
         {
-            ops->pump_set(pump, state->ctx);
+            ops->set_pump(pump, state->ctx);
         }
     }
 
     if (uv != state->uv)
     {
         state->uv = uv;
-        if ((NULL != ops) && (NULL != ops->uv_set))
+        if ((NULL != ops) && (NULL != ops->set_uv))
         {
-            ops->uv_set(uv, state->ctx);
+            ops->set_uv(uv, state->ctx);
         }
     }
 
     if (anion != state->anion)
     {
         state->anion = anion;
-        if ((NULL != ops) && (NULL != ops->anion_set))
+        if ((NULL != ops) && (NULL != ops->set_anion))
         {
-            ops->anion_set(anion, state->ctx);
+            ops->set_anion(anion, state->ctx);
         }
     }
 
@@ -533,12 +533,12 @@ static void apl_core_water_sample(struct apl_core *self)
     enum apl_water_level previous;
 
     state = apl_core_state_of(self);
-    if ((NULL == state->ops) || (NULL == state->ops->water_level_get))
+    if ((NULL == state->ops) || (NULL == state->ops->get_water_level))
     {
         return;
     }
 
-    level = state->ops->water_level_get(state->ctx);
+    level = state->ops->get_water_level(state->ctx);
     if (0u == apl_core_water_is_valid(level))
     {
         return;
@@ -884,7 +884,7 @@ void apl_core_power_off(struct apl_core *self)
     }
 }
 
-enum apl_power apl_core_power_get(const struct apl_core *self)
+enum apl_power apl_core_get_power(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -894,7 +894,7 @@ enum apl_power apl_core_power_get(const struct apl_core *self)
     return apl_core_state_of_const(self)->power;
 }
 
-enum apl_run_state apl_core_run_state_get(const struct apl_core *self)
+enum apl_run_state apl_core_get_run_state(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -904,7 +904,7 @@ enum apl_run_state apl_core_run_state_get(const struct apl_core *self)
     return apl_core_state_of_const(self)->run_state;
 }
 
-void apl_core_timer_set(struct apl_core *self,
+void apl_core_set_timer(struct apl_core *self,
                         uint32_t seconds,
                         void (*on_timer)(struct apl_core *timer_self, void *timer_ctx),
                         void *ctx)
@@ -930,7 +930,7 @@ void apl_core_timer_set(struct apl_core *self,
     state->timer_ctx = ctx;
 }
 
-uint32_t apl_core_timer_get(const struct apl_core *self)
+uint32_t apl_core_get_timer(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -940,7 +940,7 @@ uint32_t apl_core_timer_get(const struct apl_core *self)
     return apl_core_state_of_const(self)->timer_left_s;
 }
 
-void apl_core_fan_gear_set(struct apl_core *self, enum apl_fan_gear gear)
+void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear)
 {
     if ((NULL == self) || (0u == apl_core_gear_is_valid(gear)))
     {
@@ -950,7 +950,7 @@ void apl_core_fan_gear_set(struct apl_core *self, enum apl_fan_gear gear)
     apl_core_state_of(self)->fan_gear = gear;
 }
 
-enum apl_fan_gear apl_core_fan_gear_get(const struct apl_core *self)
+enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -985,6 +985,8 @@ static enum apl_link_result apl_core_cmd_power(struct apl_core *self)
     switch (state->run_state)
     {
     case APL_RUN_STANDBY:
+    case APL_RUN_DRY:
+        /* 风干是关机过程；用户再次短按电源时恢复运行。 */
         apl_core_power_on(self);
         return APL_LINK_OK;
     case APL_RUN_ON:
@@ -1209,7 +1211,7 @@ enum apl_link_result apl_core_command(struct apl_core *self,
         {
             return APL_LINK_REJECTED;
         }
-        apl_core_timer_set(self, (uint32_t)command->arg * APL_CORE_HOUR_S,
+        apl_core_set_timer(self, (uint32_t)command->arg * APL_CORE_HOUR_S,
                            apl_core_panel_timer_expire, NULL);
         return APL_LINK_OK;
     case APL_LINK_CMD_PURIFY_TOGGLE:
@@ -1263,7 +1265,7 @@ enum apl_link_result apl_core_command(struct apl_core *self,
     }
 }
 
-void apl_core_snapshot_get(const struct apl_core *self, struct apl_link_snapshot *snapshot)
+void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot *snapshot)
 {
     const struct apl_core_state *state;
 
@@ -1317,7 +1319,7 @@ void apl_core_snapshot_get(const struct apl_core *self, struct apl_link_snapshot
     }
 }
 
-void apl_core_memory_get(const struct apl_core *self, struct apl_core_memory *memory)
+void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *memory)
 {
     if (NULL == memory)
     {
@@ -1366,7 +1368,7 @@ void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory
     }
 }
 
-void apl_core_wifi_connected_set(struct apl_core *self, uint8_t connected)
+void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected)
 {
     struct apl_core_state *state;
 
@@ -1391,7 +1393,7 @@ void apl_core_filter_purify_reset(struct apl_core *self)
     apl_core_state_of(self)->filter_purify_s = 0u;
 }
 
-uint32_t apl_core_filter_purify_get(const struct apl_core *self)
+uint32_t apl_core_get_filter_purify(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -1401,7 +1403,7 @@ uint32_t apl_core_filter_purify_get(const struct apl_core *self)
     return apl_core_state_of_const(self)->filter_purify_s;
 }
 
-uint8_t apl_core_purify_enabled_get(const struct apl_core *self)
+uint8_t apl_core_get_purify_enabled(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -1423,7 +1425,7 @@ void apl_core_filter_humidify_reset(struct apl_core *self)
     apl_core_state_of(self)->filter_humidify_s = 0u;
 }
 
-uint32_t apl_core_filter_humidify_get(const struct apl_core *self)
+uint32_t apl_core_get_filter_humidify(const struct apl_core *self)
 {
     if (NULL == self)
     {
@@ -1433,7 +1435,7 @@ uint32_t apl_core_filter_humidify_get(const struct apl_core *self)
     return apl_core_state_of_const(self)->filter_humidify_s;
 }
 
-uint8_t apl_core_humidify_enabled_get(const struct apl_core *self)
+uint8_t apl_core_get_humidify_enabled(const struct apl_core *self)
 {
     if (NULL == self)
     {

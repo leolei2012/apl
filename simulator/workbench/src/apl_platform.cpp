@@ -8,9 +8,6 @@
 
 namespace {
 
-const uint32_t k_hour_seconds = 3600u;
-const uint32_t k_timer_hour_max = 12u;
-
 template <typename T>
 bool assign(T *dst, const T &src)
 {
@@ -31,7 +28,6 @@ AplPlatform::AplPlatform(QObject *parent)
     , m_apl()
     , m_coreOps()
     , m_hmiOps()
-    , m_keySlot()
     , m_down()
     , m_accounted(0)
     , m_inStep(false)
@@ -84,8 +80,6 @@ AplPlatform::AplPlatform(QObject *parent)
     };
     for (int key = 0; key < APL_HMI_KEY_COUNT; ++key)
     {
-        m_keySlot[key].platform = this;
-        m_keySlot[key].key = key;
         m_down[key] = false;
         m_keyLampRaw[key] = -1;
     }
@@ -99,6 +93,45 @@ AplPlatform::AplPlatform(QObject *parent)
     m_timer.setTimerType(Qt::PreciseTimer);
     m_timer.setInterval(APL_CORE_TICK_MS);
     reset();
+}
+
+bool AplPlatform::loadRuntime(const QString &path, QString *error, std::shared_ptr<QTemporaryDir> directory)
+{
+    if (!m_runtime.load(path, error, std::move(directory))) return false;
+    if (!m_supplied) { m_supplied = true; emit suppliedChanged(); }
+    reset();
+    appendEvent(QStringLiteral("已应用产品配置，重新上电仿真"));
+    flush();
+    return true;
+}
+
+QString AplPlatform::runStateText() const
+{
+    if (!m_supplied) return QStringLiteral("未供电");
+    switch (m_runState)
+    {
+    case APL_RUN_STANDBY: return QStringLiteral("待机");
+    case APL_RUN_ON: return QStringLiteral("正常运行");
+    case APL_RUN_DRY: return QStringLiteral("关机风干");
+    case APL_RUN_FACTORY: return QStringLiteral("产测");
+    default: return QStringLiteral("未知状态");
+    }
+}
+
+QString AplPlatform::interactionHint() const
+{
+    if (!m_supplied) return QStringLiteral("供电已断开，请先接通供电。");
+    if (m_paused) return QStringLiteral("仿真已暂停；继续仿真后，长按和倒计时才会随时间推进。");
+    if (m_childLock) return QStringLiteral("童锁已开启；长按 Timer 3 秒解锁。");
+    if (m_runState == APL_RUN_DRY)
+        return QStringLiteral("关机风干 · 剩余 %1 秒 · 短按 Power 重新开机，长按 3 秒结束风干。").arg(m_drySeconds);
+    if (m_powerupShow) return QStringLiteral("上电自检 2 秒；自检结束后短按 Power 开机。");
+    if (m_runState == APL_RUN_STANDBY) return QStringLiteral("待机 · 短按 Power 开机。");
+    if ((!m_panelLight || m_gear == APL_FAN_GEAR_SLEEP) && m_digitBrightness == 0)
+        return QStringLiteral("显示已熄灭；首次按键只唤醒，再按执行操作。");
+    if (!m_panelLight) return QStringLiteral("显示已临时唤醒；再次按键执行操作，3 秒无操作后熄灭。");
+    if (m_runState == APL_RUN_FACTORY) return QStringLiteral("产测中 · 短按 Power 退出并恢复出厂设置。");
+    return QStringLiteral("正常运行 · 鼠标点击或 Tab 选择按键，空格 / Enter 操作；持续按住 3 秒触发长按。");
 }
 
 void AplPlatform::start()
@@ -153,8 +186,8 @@ void AplPlatform::displayClear(int slot)
 }
 void AplPlatform::fanSet(int rpm)
 {
-    if(!m_supplied || rpm<0 || (m_fanKnown && m_fanRpm==rpm)) return;
-    m_fanKnown=true; m_fanRpm=rpm;
+    if(!m_supplied || rpm<0 || (m_fanKnown && m_fanOutputGear<0 && m_fanRpm==rpm)) return;
+    m_fanKnown=true; m_fanRpm=rpm; m_fanOutputGear=-1;
     appendEvent(QString("风机输出: %1 rpm").arg(rpm)); pull(); flush();
 }
 void AplPlatform::humidifierSet(bool on)
@@ -178,6 +211,14 @@ void AplPlatform::advance(int count)
     {
         stepOne();
     }
+}
+
+void AplPlatform::queryFilter()
+{
+    if (!m_supplied) return;
+    appendEvent(QStringLiteral("查询滤芯寿命"));
+    m_runtime.api().apl_hmi_filter_query(&m_apl.hmi);
+    stepOne();
 }
 
 bool AplPlatform::supplied() const
@@ -480,12 +521,16 @@ void AplPlatform::reset()
         m_down[key] = false;
     }
     emit keysChanged();
+    m_fanKnown = m_humidifierKnown = m_uvKnown = m_anionKnown = false;
+    m_fanRpm = 0;
+    m_fanOutputGear = -1;
+    m_humidifierOn = m_uvOn = m_anionOn = false;
     m_panelLight = true;
     m_frameDirty = true;
     setMessage(QStringLiteral("重新初始化"));
-    apl_init(&m_apl, &m_coreOps, this, &m_hmiOps, this);
-    bindKeys();
-    publish();
+    m_runtime.api().apl_init(&m_apl, &m_coreOps, this, &m_hmiOps, this);
+    m_runtime.api().apl_link_bind(&m_apl);
+    observe();
     pull();
     flush();
 }
@@ -526,12 +571,12 @@ void AplPlatform::selectFrontend(int index)
     releaseKeys();
 }
 
-enum apl_water_level AplPlatform::waterLevelGet(void *ctx)
+enum apl_water_level AplPlatform::getWaterLevel(void *ctx)
 {
     return static_cast<enum apl_water_level>(static_cast<AplPlatform *>(ctx)->m_water);
 }
 
-uint16_t AplPlatform::pm25Get(void *ctx)
+uint16_t AplPlatform::getPm25(void *ctx)
 {
     AplPlatform *self = static_cast<AplPlatform *>(ctx);
     self->m_pmReads += 1;
@@ -539,12 +584,12 @@ uint16_t AplPlatform::pm25Get(void *ctx)
     return static_cast<uint16_t>(self->m_pm25);
 }
 
-uint8_t AplPlatform::humidityGet(void *ctx)
+uint8_t AplPlatform::getHumidity(void *ctx)
 {
     return static_cast<uint8_t>(static_cast<AplPlatform *>(ctx)->m_humidity);
 }
 
-int16_t AplPlatform::temperatureGet(void *ctx)
+int16_t AplPlatform::getTemperature(void *ctx)
 {
     return static_cast<int16_t>(static_cast<AplPlatform *>(ctx)->m_temperature);
 }
@@ -567,7 +612,25 @@ void AplPlatform::waterRecover(struct apl_core *core, void *ctx)
     self->setMessage(QStringLiteral("水位恢复"));
 }
 
-void AplPlatform::uvSet(enum apl_switch state, void *ctx)
+void AplPlatform::setFan(enum apl_switch state, enum apl_fan_gear gear, void *ctx)
+{
+    auto *self = static_cast<AplPlatform *>(ctx);
+    if (state == APL_SWITCH_OFF) { self->fanSet(0); return; }
+    if (self->m_fanKnown && self->m_fanOutputGear == static_cast<int>(gear)) return;
+    self->m_fanKnown = true;
+    self->m_fanRpm = 0;
+    self->m_fanOutputGear = static_cast<int>(gear);
+    self->appendEvent(QStringLiteral("风机输出: ") + self->gearNameFor(gear));
+    self->pull();
+    self->flush();
+}
+
+void AplPlatform::setPump(enum apl_switch state, void *ctx)
+{
+    static_cast<AplPlatform *>(ctx)->humidifierSet(state == APL_SWITCH_ON);
+}
+
+void AplPlatform::setUv(enum apl_switch state, void *ctx)
 {
     AplPlatform *self = static_cast<AplPlatform *>(ctx);
     self->m_uvCalls += 1;
@@ -575,7 +638,7 @@ void AplPlatform::uvSet(enum apl_switch state, void *ctx)
     self->applySwitch(&self->m_uvKnown, &self->m_uvOn, state == APL_SWITCH_ON, QStringLiteral("UV"));
 }
 
-void AplPlatform::anionSet(enum apl_switch state, void *ctx)
+void AplPlatform::setAnion(enum apl_switch state, void *ctx)
 {
     AplPlatform *self = static_cast<AplPlatform *>(ctx);
     self->m_anionCalls += 1;
@@ -587,10 +650,10 @@ void AplPlatform::powerOffEvent(struct apl_core *core, void *ctx)
 {
     (void)core;
     AplPlatform *self = static_cast<AplPlatform *>(ctx);
-    apl_hmi_child_lock_set(&self->m_apl.hmi, APL_HMI_CHILD_LOCK_OFF);
+    self->m_runtime.api().apl_hmi_set_child_lock(&self->m_apl.hmi, APL_HMI_CHILD_LOCK_OFF);
 }
 
-void AplPlatform::keyStateGet(struct apl_hmi_key_state *state, void *ctx)
+void AplPlatform::getKeyState(struct apl_hmi_key_state *state, void *ctx)
 {
     AplPlatform *self = static_cast<AplPlatform *>(ctx);
     state->purify = self->m_down[APL_HMI_KEY_PURIFY] ? APL_HMI_KEY_PRESSED : APL_HMI_KEY_RELEASED;
@@ -601,52 +664,30 @@ void AplPlatform::keyStateGet(struct apl_hmi_key_state *state, void *ctx)
     state->power = self->m_down[APL_HMI_KEY_POWER] ? APL_HMI_KEY_PRESSED : APL_HMI_KEY_RELEASED;
 }
 
-void AplPlatform::onTimer(struct apl_core *core, void *ctx)
+void AplPlatform::keyEvent(enum apl_hmi_key_id key, uint8_t isLong, void *ctx)
 {
-    (void)core;
-    static_cast<AplPlatform *>(ctx)->handleTimer();
-}
-
-void AplPlatform::onShort(struct apl_hmi *hmi, void *ctx)
-{
-    (void)hmi;
-    KeySlot *slot = static_cast<KeySlot *>(ctx);
-    slot->platform->handleShort(slot->key);
-}
-
-void AplPlatform::onLong(struct apl_hmi *hmi, void *ctx)
-{
-    (void)hmi;
-    KeySlot *slot = static_cast<KeySlot *>(ctx);
-    slot->platform->handleLong(slot->key);
+    auto *self = static_cast<AplPlatform *>(ctx);
+    self->appendEvent(self->m_keyNames.at(key)
+                      + (isLong ? QStringLiteral(" 长按") : QStringLiteral(" 短按")));
 }
 
 void AplPlatform::wireOps()
 {
     std::memset(&m_coreOps, 0, sizeof(m_coreOps));
     std::memset(&m_hmiOps, 0, sizeof(m_hmiOps));
-    m_coreOps.water_level_get = &AplPlatform::waterLevelGet;
-    m_coreOps.pm25_get = &AplPlatform::pm25Get;
-    m_coreOps.humidity_get = &AplPlatform::humidityGet;
-    m_coreOps.temperature_get = &AplPlatform::temperatureGet;
+    m_coreOps.get_water_level = &AplPlatform::getWaterLevel;
+    m_coreOps.get_pm25 = &AplPlatform::getPm25;
+    m_coreOps.get_humidity = &AplPlatform::getHumidity;
+    m_coreOps.get_temperature = &AplPlatform::getTemperature;
     m_coreOps.water_on_trigger = &AplPlatform::waterTrigger;
     m_coreOps.water_on_recover = &AplPlatform::waterRecover;
-    m_coreOps.uv_set = &AplPlatform::uvSet;
-    m_coreOps.anion_set = &AplPlatform::anionSet;
+    m_coreOps.set_fan = &AplPlatform::setFan;
+    m_coreOps.set_pump = &AplPlatform::setPump;
+    m_coreOps.set_uv = &AplPlatform::setUv;
+    m_coreOps.set_anion = &AplPlatform::setAnion;
     m_coreOps.on_power_off = &AplPlatform::powerOffEvent;
-    m_hmiOps.key_state_get = &AplPlatform::keyStateGet;
-}
-
-void AplPlatform::bindKeys()
-{
-    for (int key = 0; key < APL_HMI_KEY_COUNT; ++key)
-    {
-        apl_hmi_key_callback_set(&m_apl.hmi,
-                                 static_cast<enum apl_hmi_key_id>(key),
-                                 &AplPlatform::onShort,
-                                 &AplPlatform::onLong,
-                                 &m_keySlot[key]);
-    }
+    m_hmiOps.get_key_state = &AplPlatform::getKeyState;
+    m_hmiOps.key_event = &AplPlatform::keyEvent;
 }
 
 void AplPlatform::stepOne()
@@ -657,8 +698,8 @@ void AplPlatform::stepOne()
     }
 
     m_inStep = true;
-    apl_tick(&m_apl);
-    publish();
+    m_runtime.api().apl_tick(&m_apl);
+    observe();
     pull();
     m_inStep = false;
     flush();
@@ -690,96 +731,39 @@ void AplPlatform::onClock()
     advance(due);
 }
 
-void AplPlatform::publish()
-{
-    if (!m_supplied)
-    {
-        return;
-    }
-
-    const bool power_on = apl_core_power_get(&m_apl.core) == APL_POWER_ON;
-#if APL_COMPILE_PURIFY
-    const uint8_t purify = apl_core_purify_enabled_get(&m_apl.core);
-#else
-    const uint8_t purify = 0u;
-#endif
-#if APL_COMPILE_HUMIDIFY
-    const uint8_t humidify = apl_core_humidify_enabled_get(&m_apl.core);
-#else
-    const uint8_t humidify = 0u;
-#endif
-    apl_hmi_purify_enabled_set(&m_apl.hmi, purify);
-    apl_hmi_humidify_enabled_set(&m_apl.hmi, humidify);
-    if (apl_hmi_powerup_lamp_get(&m_apl.hmi) != 0u)
-    {
-        observe();
-        return;
-    }
-
-    apl_hmi_key_lamp_set(&m_apl.hmi, APL_HMI_KEY_POWER, power_on ? APL_HMI_LAMP_FULL : APL_HMI_LAMP_HALF);
-    apl_hmi_key_lamp_set(&m_apl.hmi, APL_HMI_KEY_SPEED, power_on ? APL_HMI_LAMP_FULL : 0u);
-    apl_hmi_key_lamp_set(&m_apl.hmi,
-                         APL_HMI_KEY_TIMER,
-                         apl_core_timer_get(&m_apl.core) > 0u ? APL_HMI_LAMP_FULL : 0u);
-    apl_hmi_key_lamp_set(&m_apl.hmi, APL_HMI_KEY_PURIFY, (power_on && purify != 0u) ? APL_HMI_LAMP_FULL : 0u);
-    apl_hmi_key_lamp_set(&m_apl.hmi, APL_HMI_KEY_HUMIDITY, (power_on && humidify != 0u) ? APL_HMI_LAMP_FULL : 0u);
-    apl_hmi_key_lamp_set(&m_apl.hmi, APL_HMI_KEY_LIGHT, (power_on && m_panelLight) ? APL_HMI_LAMP_FULL : 0u);
-    for (int index = 1; index <= static_cast<int>(APL_HMI_WATER_LAMP_COUNT); ++index)
-    {
-        const uint8_t lit = (humidify != 0u && m_water >= index) ? APL_HMI_LAMP_FULL : 0u;
-        apl_hmi_water_lamp_set(&m_apl.hmi, static_cast<uint8_t>(index), lit);
-    }
-
-    const uint32_t seconds = apl_core_timer_get(&m_apl.core);
-    char text[APL_HMI_DIGIT_COUNT] = {' ', ' ', ' '};
-    enum apl_hmi_unit unit = APL_HMI_UNIT_NONE;
-    if (seconds > 0u)
-    {
-        const unsigned shown_source = seconds >= k_hour_seconds ? (seconds / k_hour_seconds) : seconds;
-        const unsigned shown = shown_source > 999u ? 999u : shown_source;
-        char buf[8];
-        std::snprintf(buf, sizeof(buf), "%3u", shown);
-        text[0] = buf[0];
-        text[1] = buf[1];
-        text[2] = buf[2];
-        if (seconds >= k_hour_seconds)
-        {
-            unit = APL_HMI_UNIT_HOUR;
-        }
-    }
-
-    apl_hmi_digits_brightness_set(&m_apl.hmi, (power_on && m_panelLight) ? APL_HMI_LAMP_FULL : 0u);
-    apl_hmi_digits_content_set(&m_apl.hmi, text);
-    apl_hmi_digits_unit_set(&m_apl.hmi, unit);
-    apl_hmi_ambient_brightness_set(&m_apl.hmi, 0u);
-    observe();
-}
-
 void AplPlatform::pull()
 {
     bool dirty = false;
-    const bool power_on = apl_core_power_get(&m_apl.core) == APL_POWER_ON;
+    const bool power_on = m_runtime.api().apl_core_get_power(&m_apl.core) == APL_POWER_ON;
+    if (m_powerOn != power_on)
+        appendEvent(power_on ? QStringLiteral("开机") : QStringLiteral("关机"));
     dirty = assign(&m_powerOn, power_on) || dirty;
 
-    const int gear = static_cast<int>(apl_core_fan_gear_get(&m_apl.core));
+    const int gear = static_cast<int>(m_runtime.api().apl_core_get_fan_gear(&m_apl.core));
     if (assign(&m_gear, gear))
     {
         m_gearName = gearNameFor(gear);
+        appendEvent(QStringLiteral("档位: ") + m_gearName);
         dirty = true;
     }
 
-    const uint32_t raw_seconds = apl_core_timer_get(&m_apl.core);
+    const uint32_t raw_seconds = m_runtime.api().apl_core_get_timer(&m_apl.core);
     const int seconds = raw_seconds > static_cast<uint32_t>(INT_MAX)
         ? INT_MAX
         : static_cast<int>(raw_seconds);
+    if (m_timerSeconds != seconds && (seconds == 0 || seconds > m_timerSeconds))
+        appendEvent(QStringLiteral("定时: %1 秒").arg(seconds));
     dirty = assign(&m_timerSeconds, seconds) || dirty;
-    dirty = assign(&m_childLock, apl_hmi_child_lock_get(&m_apl.hmi) == APL_HMI_CHILD_LOCK_ON) || dirty;
-    dirty = assign(&m_powerupShow, apl_hmi_powerup_lamp_get(&m_apl.hmi) != 0u) || dirty;
+    const bool locked = m_runtime.api().apl_hmi_get_child_lock(&m_apl.hmi) == APL_HMI_CHILD_LOCK_ON;
+    if (m_childLock != locked)
+        appendEvent(locked ? QStringLiteral("童锁开") : QStringLiteral("童锁关"));
+    dirty = assign(&m_childLock, locked) || dirty;
+    dirty = assign(&m_powerupShow, m_runtime.api().apl_hmi_get_powerup_lamp(&m_apl.hmi) != 0u) || dirty;
 
     bool lamps_changed = false;
     for (int key = 0; key < APL_HMI_KEY_COUNT; ++key)
     {
-        const int lamp = apl_hmi_key_lamp_get(&m_apl.hmi, static_cast<enum apl_hmi_key_id>(key));
+        const int lamp = m_runtime.api().apl_hmi_get_key_lamp(&m_apl.hmi, static_cast<enum apl_hmi_key_id>(key));
         if (m_keyLampRaw[key] != lamp)
         {
             m_keyLampRaw[key] = lamp;
@@ -800,7 +784,7 @@ void AplPlatform::pull()
     bool water_changed = false;
     for (int index = 0; index < static_cast<int>(APL_HMI_WATER_LAMP_COUNT); ++index)
     {
-        const int lamp = apl_hmi_water_lamp_get(&m_apl.hmi, static_cast<uint8_t>(index + 1));
+        const int lamp = m_runtime.api().apl_hmi_get_water_lamp(&m_apl.hmi, static_cast<uint8_t>(index + 1));
         if (m_waterLampRaw[index] != lamp)
         {
             m_waterLampRaw[index] = lamp;
@@ -818,29 +802,56 @@ void AplPlatform::pull()
         dirty = true;
     }
 
+    QVariantList icons;
+    for (int i = 0; i < APL_HMI_ICON_COUNT; ++i)
+        icons.append(m_runtime.api().apl_hmi_get_icon(&m_apl.hmi, static_cast<enum apl_hmi_icon>(i)));
+    if (m_iconLamps != icons && !m_iconLamps.isEmpty())
+        appendEvent(QStringLiteral("状态图标变化"));
+    dirty = assign(&m_iconLamps, icons) || dirty;
+    dirty = assign(&m_waterColor, static_cast<int>(m_runtime.api().apl_hmi_get_water_color(&m_apl.hmi))) || dirty;
+    const bool light = m_supplied && m_runtime.api().apl_hmi_get_light(&m_apl.hmi) != 0u;
+    if (m_panelLight != light)
+    {
+        m_panelLight = light;
+        appendEvent(light ? QStringLiteral("灯光开") : QStringLiteral("灯光关"));
+        dirty = true;
+    }
+
     dirty = assign(&m_digits, readDigits()) || dirty;
-    dirty = assign(&m_digitBrightness, static_cast<int>(apl_hmi_digits_brightness_get(&m_apl.hmi))) || dirty;
-    dirty = assign(&m_digitUnit, static_cast<int>(apl_hmi_digits_unit_get(&m_apl.hmi))) || dirty;
+    dirty = assign(&m_digitBrightness, static_cast<int>(m_runtime.api().apl_hmi_get_digits_brightness(&m_apl.hmi))) || dirty;
+    dirty = assign(&m_digitUnit, static_cast<int>(m_runtime.api().apl_hmi_get_digits_unit(&m_apl.hmi))) || dirty;
 
     uint8_t red = 0u;
     uint8_t green = 0u;
     uint8_t blue = 0u;
-    apl_hmi_ambient_color_get(&m_apl.hmi, &red, &green, &blue);
-    dirty = assign(&m_ambientBrightness, static_cast<int>(apl_hmi_ambient_brightness_get(&m_apl.hmi))) || dirty;
+    m_runtime.api().apl_hmi_get_ambient_color(&m_apl.hmi, &red, &green, &blue);
+    dirty = assign(&m_ambientBrightness, static_cast<int>(m_runtime.api().apl_hmi_get_ambient_brightness(&m_apl.hmi))) || dirty;
     dirty = assign(&m_ambientRed, static_cast<int>(red)) || dirty;
     dirty = assign(&m_ambientGreen, static_cast<int>(green)) || dirty;
     dirty = assign(&m_ambientBlue, static_cast<int>(blue)) || dirty;
 
-#if APL_COMPILE_PURIFY
-    dirty = assign(&m_purifyEnabled, apl_core_purify_enabled_get(&m_apl.core) != 0u) || dirty;
-#else
-    dirty = assign(&m_purifyEnabled, false) || dirty;
-#endif
-#if APL_COMPILE_HUMIDIFY
-    dirty = assign(&m_humidifyEnabled, apl_core_humidify_enabled_get(&m_apl.core) != 0u) || dirty;
-#else
-    dirty = assign(&m_humidifyEnabled, false) || dirty;
-#endif
+    struct apl_link_snapshot state;
+    m_runtime.api().apl_core_get_snapshot(&m_apl.core, &state);
+    if (assign(&m_runState, static_cast<int>(state.run_state)))
+    {
+        const QString event = QStringLiteral("运行状态：") + runStateText();
+        appendEvent(event);
+        m_message = event;
+        dirty = true;
+    }
+    dirty = assign(&m_drySeconds, static_cast<int>(qMin(state.dry_left_s, static_cast<uint32_t>(INT_MAX)))) || dirty;
+    dirty = assign(&m_purifyEnabled, state.purify_enabled != 0u) || dirty;
+    dirty = assign(&m_humidifyEnabled, state.humidify_enabled != 0u) || dirty;
+    if (assign(&m_purifyOn, state.purify_on != 0u))
+    {
+        appendEvent(m_purifyOn ? QStringLiteral("净化开关开") : QStringLiteral("净化开关关"));
+        dirty = true;
+    }
+    if (assign(&m_humidifyOn, state.humidify_on != 0u))
+    {
+        appendEvent(m_humidifyOn ? QStringLiteral("加湿开关开") : QStringLiteral("加湿开关关"));
+        dirty = true;
+    }
 
     QString fan = QStringLiteral("未驱动");
     if (!m_supplied)
@@ -849,7 +860,8 @@ void AplPlatform::pull()
     }
     else if (m_fanKnown)
     {
-        fan = m_fanRpm == 0
+        fan = m_fanOutputGear >= 0 ? QStringLiteral("运行 / %1（输出档位）").arg(gearNameFor(m_fanOutputGear))
+            : m_fanRpm == 0
             ? QStringLiteral("停止 / 0 rpm")
             : QStringLiteral("运行 %1 rpm").arg(m_fanRpm);
     }
@@ -1011,156 +1023,6 @@ void AplPlatform::supplyOn()
     flush();
 }
 
-void AplPlatform::handleShort(int key)
-{
-    if (!m_supplied || key < 0 || key >= APL_HMI_KEY_COUNT)
-    {
-        return;
-    }
-
-    appendEvent(m_keyNames.at(key) + QStringLiteral(" 短按"));
-    switch (key)
-    {
-    case APL_HMI_KEY_POWER:
-        if (apl_core_power_get(&m_apl.core) == APL_POWER_ON)
-        {
-            apl_core_power_off(&m_apl.core);
-            setMessage(QStringLiteral("关机"));
-        }
-        else
-        {
-            apl_core_power_on(&m_apl.core);
-            setMessage(QStringLiteral("开机"));
-        }
-        break;
-    case APL_HMI_KEY_SPEED:
-    {
-        enum apl_fan_gear next = APL_FAN_GEAR_SLEEP;
-        switch (apl_core_fan_gear_get(&m_apl.core))
-        {
-        case APL_FAN_GEAR_SLEEP:
-            next = APL_FAN_GEAR_1;
-            break;
-        case APL_FAN_GEAR_1:
-            next = APL_FAN_GEAR_2;
-            break;
-        case APL_FAN_GEAR_2:
-            next = APL_FAN_GEAR_3;
-            break;
-        case APL_FAN_GEAR_3:
-            next = APL_FAN_GEAR_AUTO;
-            break;
-        case APL_FAN_GEAR_AUTO:
-        case APL_FAN_GEAR_TURBO:
-            next = APL_FAN_GEAR_SLEEP;
-            break;
-        }
-        apl_core_fan_gear_set(&m_apl.core, next);
-        setMessage(gearNameFor(static_cast<int>(next)));
-        break;
-    }
-    case APL_HMI_KEY_TIMER:
-    {
-        const uint32_t seconds = apl_core_timer_get(&m_apl.core);
-        uint32_t hours = seconds == 0u ? 0u : (seconds + k_hour_seconds - 1u) / k_hour_seconds;
-        if (hours >= k_timer_hour_max)
-        {
-            hours = 0u;
-        }
-        else
-        {
-            hours += 1u;
-        }
-        if (hours == 0u)
-        {
-            apl_core_timer_set(&m_apl.core, 0u, &AplPlatform::onTimer, this);
-            setMessage(QStringLiteral("定时取消"));
-        }
-        else
-        {
-            apl_core_timer_set(&m_apl.core, hours * k_hour_seconds, &AplPlatform::onTimer, this);
-            setMessage(QStringLiteral("定时 %1 小时").arg(hours));
-        }
-        break;
-    }
-    case APL_HMI_KEY_LIGHT:
-        m_panelLight = !m_panelLight;
-        m_frameDirty = true;
-        setMessage(m_panelLight ? QStringLiteral("灯光开") : QStringLiteral("灯光关"));
-        break;
-    case APL_HMI_KEY_PURIFY:
-        setMessage(QStringLiteral("净化输出尚未规定"));
-        break;
-    case APL_HMI_KEY_HUMIDITY:
-        setMessage(QStringLiteral("加湿输出尚未规定"));
-        break;
-    default:
-        break;
-    }
-}
-
-void AplPlatform::handleLong(int key)
-{
-    if (!m_supplied || key < 0 || key >= APL_HMI_KEY_COUNT)
-    {
-        return;
-    }
-
-    appendEvent(m_keyNames.at(key) + QStringLiteral(" 长按"));
-    switch (key)
-    {
-    case APL_HMI_KEY_TIMER:
-    {
-        const enum apl_hmi_child_lock next = apl_hmi_child_lock_get(&m_apl.hmi) == APL_HMI_CHILD_LOCK_ON
-            ? APL_HMI_CHILD_LOCK_OFF
-            : APL_HMI_CHILD_LOCK_ON;
-        apl_hmi_child_lock_set(&m_apl.hmi, next);
-        setMessage(next == APL_HMI_CHILD_LOCK_ON ? QStringLiteral("童锁开") : QStringLiteral("童锁关"));
-        break;
-    }
-    case APL_HMI_KEY_SPEED:
-        if (apl_core_fan_gear_get(&m_apl.core) == APL_FAN_GEAR_TURBO)
-        {
-            apl_core_fan_gear_set(&m_apl.core, APL_FAN_GEAR_2);
-            setMessage(QStringLiteral("退出极速"));
-        }
-        else
-        {
-            apl_core_fan_gear_set(&m_apl.core, APL_FAN_GEAR_TURBO);
-            setMessage(QStringLiteral("极速"));
-        }
-        break;
-    case APL_HMI_KEY_LIGHT:
-        setMessage(QStringLiteral("睡眠尚未规定"));
-        break;
-    case APL_HMI_KEY_POWER:
-        setMessage(QStringLiteral("风干尚未规定"));
-        break;
-    case APL_HMI_KEY_PURIFY:
-        setMessage(QStringLiteral("配网尚未规定"));
-        break;
-    case APL_HMI_KEY_HUMIDITY:
-        setMessage(QStringLiteral("自清洁尚未规定"));
-        break;
-    default:
-        break;
-    }
-}
-
-void AplPlatform::handleTimer()
-{
-    if (apl_core_power_get(&m_apl.core) == APL_POWER_ON)
-    {
-        apl_core_power_off(&m_apl.core);
-        setMessage(QStringLiteral("定时到，关机"));
-    }
-    else
-    {
-        apl_core_power_on(&m_apl.core);
-        setMessage(QStringLiteral("定时到，开机"));
-    }
-}
-
 void AplPlatform::applySwitch(bool *known, bool *on, bool next, const QString &label)
 {
     if (!m_supplied)
@@ -1181,7 +1043,7 @@ void AplPlatform::applySwitch(bool *known, bool *on, bool next, const QString &l
 QString AplPlatform::readDigits() const
 {
     char raw[APL_HMI_DIGIT_COUNT];
-    apl_hmi_digits_content_get(&m_apl.hmi, raw);
+    m_runtime.api().apl_hmi_get_digits_content(&m_apl.hmi, raw);
     QString text;
     for (char ch : raw)
     {
@@ -1230,14 +1092,14 @@ AplPlatform::Snapshot AplPlatform::capture() const
     Snapshot now;
     for (int key = 0; key < APL_HMI_KEY_COUNT; ++key)
     {
-        now.keys[key] = apl_hmi_key_lamp_get(&m_apl.hmi, static_cast<enum apl_hmi_key_id>(key));
+        now.keys[key] = m_runtime.api().apl_hmi_get_key_lamp(&m_apl.hmi, static_cast<enum apl_hmi_key_id>(key));
     }
     for (int index = 0; index < static_cast<int>(APL_HMI_WATER_LAMP_COUNT); ++index)
     {
-        now.water[index] = apl_hmi_water_lamp_get(&m_apl.hmi, static_cast<uint8_t>(index + 1));
+        now.water[index] = m_runtime.api().apl_hmi_get_water_lamp(&m_apl.hmi, static_cast<uint8_t>(index + 1));
     }
     now.digits = readDigits();
-    now.unit = static_cast<int>(apl_hmi_digits_unit_get(&m_apl.hmi));
-    now.bright = apl_hmi_digits_brightness_get(&m_apl.hmi);
+    now.unit = static_cast<int>(m_runtime.api().apl_hmi_get_digits_unit(&m_apl.hmi));
+    now.bright = m_runtime.api().apl_hmi_get_digits_brightness(&m_apl.hmi);
     return now;
 }

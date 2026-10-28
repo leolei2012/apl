@@ -1,0 +1,15 @@
+{
+  "name": "apl-studio", "version": "0.1.0", "private": true, "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "tsx apps/server/src/main.ts",
+    "dev:web": "npm run dev --workspace @apl-studio/web",
+    "build:web": "npm run build --workspace @apl-studio/web",
+    "start": "npm run build:web && tsx apps/server/src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm run build:web && npm test"
+  },
+  "devDependencies": { "typescript": "5.9.3", "tsx": "4.23.12", "@types/node": "^24.0.0" }
+}

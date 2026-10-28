@@ -52,7 +52,7 @@ enum apl_water_level
 
 /**
  * 运行状态。比 apl_power 细：关机分成待机，开机之外还有关机风干和产测。
- * apl_core_power_get 仍只回答开或关；风干和产测算开机。
+ * apl_core_get_power 仍只回答开或关；风干和产测算开机。
  */
 enum apl_run_state
 {
@@ -105,7 +105,7 @@ enum apl_beep
 enum apl_link_command_type
 {
     APL_LINK_CMD_NONE = 0,
-    APL_LINK_CMD_POWER,            /**< 电源键短按：开机，或关机（加湿启用时先风干） */
+    APL_LINK_CMD_POWER,            /**< 电源键短按：待机/风干→开机；运行→关机（加湿启用时先风干） */
     APL_LINK_CMD_DRY_STOP,         /**< 风干中长按电源键：立即结束风干 */
     APL_LINK_CMD_FAN_CYCLE,        /**< 风速键短按：睡眠→一→二→三→自动循环 */
     APL_LINK_CMD_FAN_SET,          /**< 直接设档，arg 为 enum apl_fan_gear */

@@ -1,0 +1,19 @@
+{
+  "name": "@apl-studio/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@apl-studio/model": "*",
+    "@apl-studio/product": "*",
+    "@apl-studio/definition": "*",
+    "@apl-studio/templates": "*",
+    "fastify": "5.12.7",
+    "@fastify/static": "10.1.7",
+    "@fastify/websocket": "11.3.0",
+    "cordis": "4.0.0-rc.8",
+    "schemastery": "3.18.0",
+    "@apl-studio/build": "*"
+  }
+}

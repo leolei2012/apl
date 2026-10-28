@@ -31,6 +31,7 @@ struct app_alarm_system
 ### 1.3 函数
 
 - 全小写 + 下划线，`模块_动作` 格式：`app_alarm_system_init`、`drv_ain_sensor_poll`、`hal_gpio_write`。
+- 读取和设置统一使用动词在前的 `get_xxx`、`set_xxx`。公开函数保留模块前缀，如 `apl_core_get_power`、`apl_hmi_set_digits_content`；ops 回调使用 `get_pm25`、`set_uv`、`set_anion`。
 - 组合根：`<层>_init`；线程：`<层>_task_init` / `<层>_task_entry`。
 
 ### 1.4 变量
@@ -66,7 +67,7 @@ struct app_alarm_system
 - **Allman 括号**：左括号独占一行，控制语句/函数体不省略括号。
 
 ```c
-static const hal_gpio_desc_t *hal_gpio_desc_get(uint16_t id)
+static const hal_gpio_desc_t *hal_gpio_get_desc(uint16_t id)
 {
     if (id >= HAL_GPIO_COUNT)
     {

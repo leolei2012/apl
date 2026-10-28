@@ -50,53 +50,53 @@ struct host
     uint8_t buzzer;
 };
 
-static enum apl_water_level water_level_get(void *ctx)
+static enum apl_water_level get_water_level(void *ctx)
 {
     return ((struct host *)ctx)->water;
 }
 
-static uint16_t pm25_get(void *ctx)
+static uint16_t get_pm25(void *ctx)
 {
     return ((struct host *)ctx)->pm25;
 }
 
-static uint16_t pm10_get(void *ctx)
+static uint16_t get_pm10(void *ctx)
 {
     return ((struct host *)ctx)->pm10;
 }
 
-static uint16_t hcho_get(void *ctx)
+static uint16_t get_hcho(void *ctx)
 {
     return ((struct host *)ctx)->hcho;
 }
 
-static uint8_t humidity_get(void *ctx)
+static uint8_t get_humidity(void *ctx)
 {
     return ((struct host *)ctx)->humidity;
 }
 
-static uint8_t interlock_get(void *ctx)
+static uint8_t get_interlock(void *ctx)
 {
     return ((struct host *)ctx)->interlock;
 }
 
-static void fan_set(enum apl_switch state, enum apl_fan_gear gear, void *ctx)
+static void set_fan(enum apl_switch state, enum apl_fan_gear gear, void *ctx)
 {
     ((struct host *)ctx)->fan = state;
     ((struct host *)ctx)->fan_gear = gear;
 }
 
-static void pump_set(enum apl_switch state, void *ctx)
+static void set_pump(enum apl_switch state, void *ctx)
 {
     ((struct host *)ctx)->pump = state;
 }
 
-static void uv_set(enum apl_switch state, void *ctx)
+static void set_uv(enum apl_switch state, void *ctx)
 {
     ((struct host *)ctx)->uv = state;
 }
 
-static void anion_set(enum apl_switch state, void *ctx)
+static void set_anion(enum apl_switch state, void *ctx)
 {
     ((struct host *)ctx)->anion = state;
 }
@@ -113,12 +113,12 @@ static void memory_save(const struct apl_core_memory *memory, void *ctx)
     ((struct host *)ctx)->memory_saves++;
 }
 
-static void key_state_get(struct apl_hmi_key_state *state, void *ctx)
+static void get_key_state(struct apl_hmi_key_state *state, void *ctx)
 {
     *state = ((struct host *)ctx)->keys;
 }
 
-static void buzzer_set(uint8_t on, void *ctx)
+static void set_buzzer(uint8_t on, void *ctx)
 {
     struct host *host;
 
@@ -142,20 +142,20 @@ static void host_reset(struct host *host)
     host->interlock = 1u;
 
     memset(&g_core_ops, 0, sizeof(g_core_ops));
-    g_core_ops.water_level_get = water_level_get;
-    g_core_ops.pm25_get = pm25_get;
-    g_core_ops.humidity_get = humidity_get;
-    g_core_ops.uv_set = uv_set;
-    g_core_ops.anion_set = anion_set;
+    g_core_ops.get_water_level = get_water_level;
+    g_core_ops.get_pm25 = get_pm25;
+    g_core_ops.get_humidity = get_humidity;
+    g_core_ops.set_uv = set_uv;
+    g_core_ops.set_anion = set_anion;
     g_core_ops.on_power_off = on_power_off;
-    g_core_ops.uv_interlock_get = interlock_get;
-    g_core_ops.fan_set = fan_set;
-    g_core_ops.pump_set = pump_set;
+    g_core_ops.get_uv_interlock = get_interlock;
+    g_core_ops.set_fan = set_fan;
+    g_core_ops.set_pump = set_pump;
     g_core_ops.memory_save = memory_save;
 
     memset(&g_hmi_ops, 0, sizeof(g_hmi_ops));
-    g_hmi_ops.key_state_get = key_state_get;
-    g_hmi_ops.buzzer_set = buzzer_set;
+    g_hmi_ops.get_key_state = get_key_state;
+    g_hmi_ops.set_buzzer = set_buzzer;
 }
 
 static enum apl_link_result cmd(struct apl_core *core, enum apl_link_command_type type, uint8_t arg)
@@ -181,7 +181,7 @@ static struct apl_link_snapshot snap_of(const struct apl_core *core)
 {
     struct apl_link_snapshot snap;
 
-    apl_core_snapshot_get(core, &snap);
+    apl_core_get_snapshot(core, &snap);
     return snap;
 }
 
@@ -243,11 +243,11 @@ static void test_power_and_dry(void)
     struct apl_link_snapshot snap;
 
     core_start(&core, &host);
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
     apl_core_tick(&core);
-    EXPECT(APL_RUN_ON == apl_core_run_state_get(&core));
-    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(&core));
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_get_fan_gear(&core));
     EXPECT(APL_SWITCH_ON == host.fan);
     EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
     EXPECT(1u == host.memory.running);
@@ -259,11 +259,11 @@ static void test_power_and_dry(void)
     EXPECT(APL_FAN_GEAR_3 == host.fan_gear);
     EXPECT(APL_FAN_GEAR_3 == host.memory.fan_gear);
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_FAN_CYCLE, 0u));
-    EXPECT(APL_FAN_GEAR_AUTO == apl_core_fan_gear_get(&core));
+    EXPECT(APL_FAN_GEAR_AUTO == apl_core_get_fan_gear(&core));
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_FAN_CYCLE, 0u));
-    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_fan_gear_get(&core));
+    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&core));
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_FAN_CYCLE, 0u));
-    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(&core));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_get_fan_gear(&core));
 
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_TIMER_SET, 3u));
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
@@ -279,11 +279,21 @@ static void test_power_and_dry(void)
         EXPECT(APL_SWITCH_ON == host.fan);
         EXPECT(0u == host.memory.running);
         EXPECT(0 == host.power_off);
-        EXPECT(APL_LINK_REJECTED == cmd(&core, APL_LINK_CMD_POWER, 0u));
+        /* 风干中短按应恢复运行，不能把用户困在风干状态。 */
+        EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
+        apl_core_tick(&core);
+        EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
+        EXPECT(0u == snap_of(&core).dry_left_s);
+        EXPECT(1u == host.memory.running);
+        EXPECT(0 == host.power_off);
+        EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_FAN_CYCLE, 0u));
+        EXPECT(APL_FAN_GEAR_2 == apl_core_get_fan_gear(&core));
+        apl_core_set_fan_gear(&core, APL_FAN_GEAR_1);
+        EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
         core_seconds(&core, APL_CORE_DRY_S - 1u);
-        EXPECT(APL_RUN_DRY == apl_core_run_state_get(&core));
+        EXPECT(APL_RUN_DRY == apl_core_get_run_state(&core));
         core_seconds(&core, 1u);
-        EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+        EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
         EXPECT(1 == host.power_off);
         EXPECT(APL_SWITCH_OFF == host.fan);
 
@@ -291,7 +301,7 @@ static void test_power_and_dry(void)
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_DRY_STOP, 0u));
-        EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+        EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
         EXPECT(2 == host.power_off);
     }
     else
@@ -303,7 +313,7 @@ static void test_power_and_dry(void)
 
     /* 非首次开机恢复记忆档位。 */
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
-    EXPECT(APL_FAN_GEAR_1 == apl_core_fan_gear_get(&core));
+    EXPECT(APL_FAN_GEAR_1 == apl_core_get_fan_gear(&core));
 }
 
 static void test_memory(void)
@@ -321,9 +331,9 @@ static void test_memory(void)
     memory.humidify_on = 1u;
     memory.filter_purify_s = 1234u;
     apl_core_memory_restore(&core, &memory);
-    EXPECT(APL_RUN_ON == apl_core_run_state_get(&core));
-    EXPECT(APL_FAN_GEAR_3 == apl_core_fan_gear_get(&core));
-    apl_core_memory_get(&core, &memory);
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
+    EXPECT(APL_FAN_GEAR_3 == apl_core_get_fan_gear(&core));
+    apl_core_get_memory(&core, &memory);
     EXPECT(1234u == memory.filter_purify_s);
     EXPECT(1u == memory.running);
 
@@ -331,16 +341,16 @@ static void test_memory(void)
     core_start(&core, &host);
     memory.running = 0u;
     apl_core_memory_restore(&core, &memory);
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
 
     /* 运行中掉电：用过的机器自动开机；首次没有手动开过机则不开。 */
     core_start(&core, &host);
     memory.running = 1u;
     memory.used = 0u;
     apl_core_memory_restore(&core, &memory);
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
 
-    apl_core_memory_get(NULL, &memory);
+    apl_core_get_memory(NULL, &memory);
     EXPECT(0u == memory.running);
     apl_core_memory_restore(&core, NULL);
 }
@@ -354,17 +364,17 @@ static void test_timer_turbo_sleep(void)
     core_start(&core, &host);
     (void)cmd(&core, APL_LINK_CMD_POWER, 0u);
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_TIMER_SET, 1u));
-    EXPECT(3600u == apl_core_timer_get(&core));
+    EXPECT(3600u == apl_core_get_timer(&core));
     core_seconds(&core, 3599u);
-    EXPECT(APL_RUN_ON == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
     core_seconds(&core, 1u);
     /* 定时到期整机关机进入待机，不走风干。 */
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
 
     (void)cmd(&core, APL_LINK_CMD_POWER, 0u);
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_TIMER_SET, 2u));
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_TIMER_SET, 0u));
-    EXPECT(0u == apl_core_timer_get(&core));
+    EXPECT(0u == apl_core_get_timer(&core));
 
     (void)cmd(&core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_2);
     apl_core_tick(&core);
@@ -498,9 +508,9 @@ static void test_water(void)
     host.water = APL_WATER_LEVEL_0;
     apl_core_tick(&core);
     core_seconds(&core, APL_CORE_WATER_SHORTAGE_RUN_S - 1u);
-    EXPECT(APL_RUN_ON == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
     core_seconds(&core, 1u);
-    EXPECT(APL_RUN_DRY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_DRY == apl_core_get_run_state(&core));
 
     /* 睡眠中缺水不响。 */
     core_start(&core, &host);
@@ -567,15 +577,15 @@ static void test_filter(void)
     /* 只在运行中累计。 */
     core_seconds(&core, 2u);
 #if APL_COMPILE_PURIFY
-    EXPECT(0u == apl_core_filter_purify_get(&core));
+    EXPECT(0u == apl_core_get_filter_purify(&core));
 #endif
     (void)cmd(&core, APL_LINK_CMD_POWER, 0u);
     core_seconds(&core, 2u);
 #if APL_COMPILE_PURIFY
-    EXPECT(2u == apl_core_filter_purify_get(&core));
+    EXPECT(2u == apl_core_get_filter_purify(&core));
 #endif
 #if APL_COMPILE_HUMIDIFY
-    EXPECT(2u == apl_core_filter_humidify_get(&core));
+    EXPECT(2u == apl_core_get_filter_humidify(&core));
 #endif
 }
 
@@ -618,8 +628,8 @@ static void test_purify(void)
     EXPECT(0u == snap_of(&core).uv_fault);
 
     /* 空气质量取最差一项，自动档跟随。 */
-    g_core_ops.pm10_get = pm10_get;
-    g_core_ops.hcho_get = hcho_get;
+    g_core_ops.get_pm10 = get_pm10;
+    g_core_ops.get_hcho = get_hcho;
     (void)cmd(&core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO);
     host.pm25 = 35u;
     core_seconds(&core, 1u);
@@ -681,7 +691,7 @@ static void test_factory_wifi(void)
     EXPECT(APL_FAN_GEAR_1 == snap.fan_gear);
     EXPECT(snap.filter_purify_left == (HAS_PURIFY ? 99u : 0u));
 #if APL_COMPILE_PURIFY
-    EXPECT(100u == apl_core_filter_purify_get(&core));
+    EXPECT(100u == apl_core_get_filter_purify(&core));
 #endif
     core_seconds(&core, APL_CORE_FACTORY_CL_S);
     EXPECT(0u == snap_of(&core).factory_done);
@@ -696,7 +706,7 @@ static void test_factory_wifi(void)
     memory.factory_pending = 1u;
     memory.running = 1u;
     apl_core_memory_restore(&core, &memory);
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
     EXPECT(1u == snap_of(&core).factory_done);
     EXPECT(0u == host.memory.factory_pending);
 
@@ -707,9 +717,9 @@ static void test_factory_wifi(void)
     core_seconds(&core, APL_CORE_WIFI_PAIR_S);
     EXPECT(APL_WIFI_OFF == snap_of(&core).wifi);
     (void)cmd(&core, APL_LINK_CMD_WIFI_PAIR, 0u);
-    apl_core_wifi_connected_set(&core, 1u);
+    apl_core_set_wifi_connected(&core, 1u);
     EXPECT(APL_WIFI_CONNECTED == snap_of(&core).wifi);
-    apl_core_wifi_connected_set(&core, 7u);
+    apl_core_set_wifi_connected(&core, 7u);
     EXPECT(APL_WIFI_CONNECTED == snap_of(&core).wifi);
 }
 
@@ -772,101 +782,101 @@ static void test_panel(void)
 
     machine_start(&machine, &host);
     EXPECT(1 == host.buzzer_on_edges);   /* 上电一声 */
-    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_POWER));
-    EXPECT(0u == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_SPEED));
+    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_POWER));
+    EXPECT(0u == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_SPEED));
 
     press(&machine, &host, APL_HMI_KEY_POWER, SHORT_PRESS);
-    EXPECT(APL_RUN_ON == apl_core_run_state_get(&machine.core));
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&machine.core));
     machine_ticks(&machine, TICKS_PER_S);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_POWER));
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_1));
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_POWER));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_1));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     if (HAS_PURIFY)
     {
         EXPECT(0 == memcmp(digits, " 20", 3));
-        EXPECT(APL_HMI_UNIT_PM25 == apl_hmi_digits_unit_get(&machine.hmi));
-        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_ambient_brightness_get(&machine.hmi));
+        EXPECT(APL_HMI_UNIT_PM25 == apl_hmi_get_digits_unit(&machine.hmi));
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_ambient_brightness(&machine.hmi));
     }
     else
     {
         EXPECT(0 == memcmp(digits, " 50", 3));
-        EXPECT(APL_HMI_UNIT_PERCENT == apl_hmi_digits_unit_get(&machine.hmi));
+        EXPECT(APL_HMI_UNIT_PERCENT == apl_hmi_get_digits_unit(&machine.hmi));
     }
     if (HAS_HUMIDIFY)
     {
-        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_water_lamp_get(&machine.hmi, 3u));
-        EXPECT(0u == apl_hmi_water_lamp_get(&machine.hmi, 4u));
-        EXPECT(APL_HMI_WATER_GREEN == apl_hmi_water_color_get(&machine.hmi));
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_water_lamp(&machine.hmi, 3u));
+        EXPECT(0u == apl_hmi_get_water_lamp(&machine.hmi, 4u));
+        EXPECT(APL_HMI_WATER_GREEN == apl_hmi_get_water_color(&machine.hmi));
     }
     else
     {
-        EXPECT(0u == apl_hmi_water_lamp_get(&machine.hmi, 1u));
+        EXPECT(0u == apl_hmi_get_water_lamp(&machine.hmi, 1u));
     }
 
     press(&machine, &host, APL_HMI_KEY_SPEED, SHORT_PRESS);
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_2 == apl_core_get_fan_gear(&machine.core));
     press(&machine, &host, APL_HMI_KEY_SPEED, LONG_PRESS);
-    EXPECT(APL_FAN_GEAR_TURBO == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_TURBO == apl_core_get_fan_gear(&machine.core));
     press(&machine, &host, APL_HMI_KEY_SPEED, LONG_PRESS);
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_2 == apl_core_get_fan_gear(&machine.core));
 
     /* 定时：按两下显示 2，H 闪，3 秒确认。 */
     press(&machine, &host, APL_HMI_KEY_TIMER, SHORT_PRESS);
     press(&machine, &host, APL_HMI_KEY_TIMER, SHORT_PRESS);
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     EXPECT(0 == memcmp(digits, "  2", 3));
-    EXPECT(0u == apl_core_timer_get(&machine.core));
+    EXPECT(0u == apl_core_get_timer(&machine.core));
     machine_ticks(&machine, APL_HMI_IDLE_TICKS);
-    EXPECT(7200u == apl_core_timer_get(&machine.core));
+    EXPECT(7200u == apl_core_get_timer(&machine.core));
     machine_ticks(&machine, 1u);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_TIMER));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_TIMER));
 
     /* 定时中再按：先显示剩余小时数。 */
     press(&machine, &host, APL_HMI_KEY_TIMER, SHORT_PRESS);
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     EXPECT(0 == memcmp(digits, "  2", 3));
     machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
 
     /* 童锁：定时键长按。锁住时其他键无效，定时键长按解锁。 */
     press(&machine, &host, APL_HMI_KEY_TIMER, LONG_PRESS);
-    EXPECT(APL_HMI_CHILD_LOCK_ON == apl_hmi_child_lock_get(&machine.hmi));
+    EXPECT(APL_HMI_CHILD_LOCK_ON == apl_hmi_get_child_lock(&machine.hmi));
     machine_ticks(&machine, 1u);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_LOCK));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_LOCK));
     press(&machine, &host, APL_HMI_KEY_SPEED, SHORT_PRESS);
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_2 == apl_core_get_fan_gear(&machine.core));
     press(&machine, &host, APL_HMI_KEY_TIMER, LONG_PRESS);
-    EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_child_lock_get(&machine.hmi));
+    EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_get_child_lock(&machine.hmi));
 
     /* 灯光关：状态显示熄灭，键灯不受影响；第一次触摸只唤醒。 */
     press(&machine, &host, APL_HMI_KEY_LIGHT, SHORT_PRESS);
-    EXPECT(0u == apl_hmi_light_get(&machine.hmi));
+    EXPECT(0u == apl_hmi_get_light(&machine.hmi));
     machine_ticks(&machine, 1u);
-    EXPECT(0u == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_2));
-    EXPECT(0u == apl_hmi_digits_brightness_get(&machine.hmi));
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_POWER));
+    EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_2));
+    EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_POWER));
     press(&machine, &host, APL_HMI_KEY_SPEED, SHORT_PRESS);
-    EXPECT(APL_FAN_GEAR_2 == apl_core_fan_gear_get(&machine.core));
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_2));
+    EXPECT(APL_FAN_GEAR_2 == apl_core_get_fan_gear(&machine.core));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_2));
     press(&machine, &host, APL_HMI_KEY_SPEED, SHORT_PRESS);
-    EXPECT(APL_FAN_GEAR_3 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_3 == apl_core_get_fan_gear(&machine.core));
     machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
-    EXPECT(0u == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_3));
+    EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_3));
     press(&machine, &host, APL_HMI_KEY_LIGHT, SHORT_PRESS);   /* 唤醒 */
     press(&machine, &host, APL_HMI_KEY_LIGHT, SHORT_PRESS);   /* 开灯 */
-    EXPECT(1u == apl_hmi_light_get(&machine.hmi));
+    EXPECT(1u == apl_hmi_get_light(&machine.hmi));
 
     /* 睡眠：灯光键长按；3 秒无操作熄屏。 */
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);
-    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
     machine_ticks(&machine, 2u);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     machine_ticks(&machine, APL_HMI_IDLE_TICKS);
-    EXPECT(0u == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
+    EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 唤醒 */
-    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 退出睡眠 */
-    EXPECT(APL_FAN_GEAR_3 == apl_core_fan_gear_get(&machine.core));
+    EXPECT(APL_FAN_GEAR_3 == apl_core_get_fan_gear(&machine.core));
 
     /* 滤网重置组合键：定时 + 风速 3 秒。 */
     host.keys.timer = APL_HMI_KEY_PRESSED;
@@ -875,13 +885,13 @@ static void test_panel(void)
     host.keys.timer = APL_HMI_KEY_RELEASED;
     host.keys.speed = APL_HMI_KEY_RELEASED;
     machine_ticks(&machine, 2u);
-    apl_core_snapshot_get(&machine.core, &snap);
+    apl_core_get_snapshot(&machine.core, &snap);
     EXPECT(1u == snap.filter_reset_seq);
     EXPECT(1u == snap.filter_reset_forced);
     EXPECT(APL_FAN_GEAR_3 == snap.fan_gear);
-    EXPECT(0u == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
+    EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
     machine_ticks(&machine, 60u);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_FILTER_WHITE));
 
     /* 加湿相关：一体机湿度键短按开关加湿，长按设恒湿；加湿器短按设恒湿。 */
     if (HAS_HUMIDIFY && HAS_PURIFY)
@@ -891,20 +901,20 @@ static void test_panel(void)
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
         EXPECT(1u == snap_of(&machine.core).humidify_on);
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, LONG_PRESS);
-        apl_hmi_digits_content_get(&machine.hmi, digits);
+        apl_hmi_get_digits_content(&machine.hmi, digits);
         EXPECT(0 == memcmp(digits, " OF", 3));
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
         machine_ticks(&machine, APL_HMI_IDLE_TICKS);
         EXPECT(45u == snap_of(&machine.core).humidity_target);
         machine_ticks(&machine, 1u);
-        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_HUMIDITY));
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_HUMIDITY));
     }
     else if (HAS_HUMIDIFY)
     {
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
-        apl_hmi_digits_content_get(&machine.hmi, digits);
+        apl_hmi_get_digits_content(&machine.hmi, digits);
         EXPECT(0 == memcmp(digits, " 45", 3));
         machine_ticks(&machine, APL_HMI_IDLE_TICKS);
         EXPECT(45u == snap_of(&machine.core).humidity_target);
@@ -913,7 +923,7 @@ static void test_panel(void)
     {
         /* 加湿未启用：湿度键短按不发出。 */
         press(&machine, &host, APL_HMI_KEY_HUMIDITY, SHORT_PRESS);
-        EXPECT(0u == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_HUMIDITY));
+        EXPECT(0u == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_HUMIDITY));
     }
 
     /* 缺水显示：最左一格橙灯闪。 */
@@ -921,9 +931,9 @@ static void test_panel(void)
     {
         host.water = APL_WATER_LEVEL_0;
         machine_ticks(&machine, 2u);
-        EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_water_color_get(&machine.hmi));
-        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_water_lamp_get(&machine.hmi, 1u));
-        EXPECT(0u == apl_hmi_water_lamp_get(&machine.hmi, 2u));
+        EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_get_water_color(&machine.hmi));
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_water_lamp(&machine.hmi, 1u));
+        EXPECT(0u == apl_hmi_get_water_lamp(&machine.hmi, 2u));
         host.water = APL_WATER_LEVEL_3;
         machine_ticks(&machine, 2u);
     }
@@ -931,7 +941,7 @@ static void test_panel(void)
     /* 滤芯查询 3 秒。 */
     apl_hmi_filter_query(&machine.hmi);
     machine_ticks(&machine, 1u);
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     EXPECT(0 == memcmp(digits, " 99", 3));
 
     /* 关机：加湿启用先风干，只亮电源键和风干图标；长按电源键结束。 */
@@ -939,15 +949,22 @@ static void test_panel(void)
     machine_ticks(&machine, 1u);
     if (HAS_HUMIDIFY)
     {
-        EXPECT(APL_RUN_DRY == apl_core_run_state_get(&machine.core));
-        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_DRY));
-        EXPECT(0u == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_SPEED));
-        EXPECT(0u == apl_hmi_digits_brightness_get(&machine.hmi));
+        EXPECT(APL_RUN_DRY == apl_core_get_run_state(&machine.core));
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_DRY));
+        EXPECT(0u == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_SPEED));
+        EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
+        press(&machine, &host, APL_HMI_KEY_POWER, SHORT_PRESS);
+        EXPECT(APL_RUN_ON == apl_core_get_run_state(&machine.core));
+        EXPECT(0u == snap_of(&machine.core).dry_left_s);
+        press(&machine, &host, APL_HMI_KEY_SPEED, SHORT_PRESS);
+        EXPECT(APL_RUN_ON == apl_core_get_run_state(&machine.core));
+        press(&machine, &host, APL_HMI_KEY_POWER, SHORT_PRESS);
+        EXPECT(APL_RUN_DRY == apl_core_get_run_state(&machine.core));
         press(&machine, &host, APL_HMI_KEY_POWER, LONG_PRESS);
     }
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&machine.core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&machine.core));
     machine_ticks(&machine, 1u);
-    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_POWER));
+    EXPECT(APL_HMI_LAMP_HALF == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_POWER));
 }
 
 static void test_panel_factory(void)
@@ -965,18 +982,18 @@ static void test_panel_factory(void)
     host.keys.power = APL_HMI_KEY_RELEASED;
     host.keys.timer = APL_HMI_KEY_RELEASED;
     machine_ticks(&machine, 2u);
-    EXPECT(APL_RUN_FACTORY == apl_core_run_state_get(&machine.core));
-    EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_child_lock_get(&machine.hmi));
+    EXPECT(APL_RUN_FACTORY == apl_core_get_run_state(&machine.core));
+    EXPECT(APL_HMI_CHILD_LOCK_OFF == apl_hmi_get_child_lock(&machine.hmi));
     EXPECT(edges + 1 == host.buzzer_on_edges);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&machine.hmi, APL_HMI_ICON_UV));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_UV));
 
     press(&machine, &host, APL_HMI_KEY_POWER, SHORT_PRESS);
-    EXPECT(APL_RUN_STANDBY == apl_core_run_state_get(&machine.core));
+    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&machine.core));
     machine_ticks(&machine, 1u);
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     EXPECT(0 == memcmp(digits, " CL", 3));
     machine_ticks(&machine, APL_CORE_FACTORY_CL_S * TICKS_PER_S + 1u);
-    apl_hmi_digits_content_get(&machine.hmi, digits);
+    apl_hmi_get_digits_content(&machine.hmi, digits);
     EXPECT(0 == memcmp(digits, "   ", 3));
 }
 
@@ -987,34 +1004,34 @@ static void test_hmi_resources(void)
 
     host_reset(&host);
     apl_hmi_init(&hmi, &g_hmi_ops, &host);
-    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_icon_get(&hmi, APL_HMI_ICON_WIFI));   /* 上电全亮 */
-    apl_hmi_icon_set(&hmi, APL_HMI_ICON_COUNT, 9u);
-    EXPECT(0u == apl_hmi_icon_get(&hmi, APL_HMI_ICON_COUNT));
-    EXPECT(0u == apl_hmi_icon_get(NULL, APL_HMI_ICON_WIFI));
-    apl_hmi_water_color_set(&hmi, APL_HMI_WATER_ORANGE);
-    EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_water_color_get(&hmi));
-    apl_hmi_water_color_set(&hmi, (enum apl_hmi_water_color)7);
-    EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_water_color_get(&hmi));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&hmi, APL_HMI_ICON_WIFI));   /* 上电全亮 */
+    apl_hmi_set_icon(&hmi, APL_HMI_ICON_COUNT, 9u);
+    EXPECT(0u == apl_hmi_get_icon(&hmi, APL_HMI_ICON_COUNT));
+    EXPECT(0u == apl_hmi_get_icon(NULL, APL_HMI_ICON_WIFI));
+    apl_hmi_set_water_color(&hmi, APL_HMI_WATER_ORANGE);
+    EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_get_water_color(&hmi));
+    apl_hmi_set_water_color(&hmi, (enum apl_hmi_water_color)7);
+    EXPECT(APL_HMI_WATER_ORANGE == apl_hmi_get_water_color(&hmi));
 
     /* 提示音：3 声，100 ms 响 100 ms 停。 */
     apl_hmi_buzzer_play(&hmi, 3u, 100u, 100u);
     host.buzzer_on_edges = 0;
-    while (0u != apl_hmi_buzzer_busy_get(&hmi))
+    while (0u != apl_hmi_get_buzzer_busy(&hmi))
     {
         apl_hmi_tick(&hmi);
     }
     EXPECT(3 == host.buzzer_on_edges);
     EXPECT(0u == host.buzzer);
     apl_hmi_buzzer_play(&hmi, 0u, 100u, 0u);
-    EXPECT(0u == apl_hmi_buzzer_busy_get(&hmi));
+    EXPECT(0u == apl_hmi_get_buzzer_busy(&hmi));
 
     /* 未接面板逻辑时，快照不改启用标志，也不绘制。 */
     {
         struct apl_link_snapshot snap;
 
         memset(&snap, 0, sizeof(snap));
-        apl_hmi_snapshot_set(&hmi, &snap);
-        EXPECT(1u == apl_hmi_purify_enabled_get(&hmi));
+        apl_hmi_set_snapshot(&hmi, &snap);
+        EXPECT(1u == apl_hmi_get_purify_enabled(&hmi));
     }
 }
 

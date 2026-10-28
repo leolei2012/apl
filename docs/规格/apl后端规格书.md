@@ -71,21 +71,21 @@ core → link_snapshot → hmi（原样呈现）
 ```c
 struct apl_core_ops
 {
-    enum apl_water_level (*water_level_get)(void *ctx);
-    uint16_t (*pm25_get)(void *ctx);
-    uint8_t (*humidity_get)(void *ctx);
-    int16_t (*temperature_get)(void *ctx);
+    enum apl_water_level (*get_water_level)(void *ctx);
+    uint16_t (*get_pm25)(void *ctx);
+    uint8_t (*get_humidity)(void *ctx);
+    int16_t (*get_temperature)(void *ctx);
     void (*water_on_trigger)(struct apl_core *self, void *ctx);
     void (*water_on_recover)(struct apl_core *self, void *ctx);
-    void (*uv_set)(enum apl_switch state, void *ctx);
-    void (*anion_set)(enum apl_switch state, void *ctx);
+    void (*set_uv)(enum apl_switch state, void *ctx);
+    void (*set_anion)(enum apl_switch state, void *ctx);
     void (*on_power_off)(struct apl_core *self, void *ctx);
-    uint16_t (*pm10_get)(void *ctx);         /* 选配 */
-    uint16_t (*hcho_get)(void *ctx);         /* 选配，μg/m³ */
-    uint16_t (*tvoc_get)(void *ctx);         /* 选配，μg/m³ */
-    uint8_t (*uv_interlock_get)(void *ctx);  /* 空则视为闭合 */
-    void (*fan_set)(enum apl_switch state, enum apl_fan_gear gear, void *ctx);
-    void (*pump_set)(enum apl_switch state, void *ctx);
+    uint16_t (*get_pm10)(void *ctx);         /* 选配 */
+    uint16_t (*get_hcho)(void *ctx);         /* 选配，μg/m³ */
+    uint16_t (*get_tvoc)(void *ctx);         /* 选配，μg/m³ */
+    uint8_t (*get_uv_interlock)(void *ctx);  /* 空则视为闭合 */
+    void (*set_fan)(enum apl_switch state, enum apl_fan_gear gear, void *ctx);
+    void (*set_pump)(enum apl_switch state, void *ctx);
     void (*memory_save)(const struct apl_core_memory *memory, void *ctx);
 };
 
@@ -96,17 +96,17 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 宿主和 APL 双向交换的任何数据都走 getter 和 setter。硬件归宿主，仍放在上面的 ops 里，由 APL 调用。APL 自己持有的状态归库，宿主用库提供的 getter、setter 读写，不访问对象成员。`struct apl_core` 里的字节只给使用方分配实例。到时回调、关机回调和水位回调仍由 setter 或 ops 绑定，不提供取出函数指针的 getter。
 
-宿主调用 APL 的业务方法仍然留在库内：`apl_core_power_on`、`apl_core_power_off`、`apl_core_power_get`、`apl_core_timer_set`、`apl_core_timer_get`、`apl_core_fan_gear_set`、`apl_core_fan_gear_get`，以及按编译开关出现的 `apl_core_filter_purify_reset`、`apl_core_filter_purify_get`、`apl_core_purify_enabled_get`、`apl_core_filter_humidify_reset`、`apl_core_filter_humidify_get`、`apl_core_humidify_enabled_get`。新增 `apl_core_command`、`apl_core_snapshot_get`、`apl_core_run_state_get`、`apl_core_memory_get`、`apl_core_memory_restore`、`apl_core_wifi_connected_set`。动态配置的修改入口尚未规定，因此启用标志只有 getter。滤网除重置外没有一般的 setter。水位不提供给宿主的 getter。UV、负离子仍只走宿主的 `uv_set`、`anion_set`。
+宿主调用 APL 的业务方法仍然留在库内：`apl_core_power_on`、`apl_core_power_off`、`apl_core_get_power`、`apl_core_set_timer`、`apl_core_get_timer`、`apl_core_set_fan_gear`、`apl_core_get_fan_gear`，以及按编译开关出现的 `apl_core_filter_purify_reset`、`apl_core_get_filter_purify`、`apl_core_get_purify_enabled`、`apl_core_filter_humidify_reset`、`apl_core_get_filter_humidify`、`apl_core_get_humidify_enabled`。新增 `apl_core_command`、`apl_core_get_snapshot`、`apl_core_get_run_state`、`apl_core_get_memory`、`apl_core_memory_restore`、`apl_core_set_wifi_connected`。动态配置的修改入口尚未规定，因此启用标志只有 getter。滤网除重置外没有一般的 setter。水位不提供给宿主的 getter。UV、负离子仍只走宿主的 `set_uv`、`set_anion`。
 
 ### 3.2 link_command 与 link_snapshot
 
-人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每拍可用 `apl_core_snapshot_get` 取一份 `struct apl_link_snapshot`。`src/apl.c` 在 `apl_tick` 里先推进主控，再把快照交给人机。
+人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每拍可用 `apl_core_get_snapshot` 取一份 `struct apl_link_snapshot`。`src/apl.c` 在 `apl_tick` 里先推进主控，再把快照交给人机。
 
 `struct apl_link_command` 只有两项：`type`（`enum apl_link_command_type`）和 `arg`（`uint8_t`，不用时为 0）。
 
 | type | arg | 接受条件 | 动作 |
 |---|---|---|---|
-| `APL_LINK_CMD_POWER` | — | 待机或运行 | 待机→开机；运行→加湿启用时进入风干，否则关机 |
+| `APL_LINK_CMD_POWER` | — | 待机、运行或风干 | 待机/风干→开机；运行→加湿启用时进入风干，否则关机 |
 | `APL_LINK_CMD_DRY_STOP` | — | 风干 | 立即关机进入待机 |
 | `APL_LINK_CMD_FAN_CYCLE` | — | 运行 | 睡眠→一→二→三→自动→睡眠；极速中按进入极速前的档位往下走 |
 | `APL_LINK_CMD_FAN_SET` | 档位 | 运行，档位合法 | 直接设档 |
@@ -220,7 +220,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 运行状态（`enum apl_run_state`）同一时刻只有一个：
 
-| 状态 | 含义 | `apl_core_power_get` |
+| 状态 | 含义 | `apl_core_get_power` |
 |---|---|---|
 | `APL_RUN_STANDBY` | 待机（关机） | `APL_POWER_OFF` |
 | `APL_RUN_ON` | 运行 | `APL_POWER_ON` |
@@ -229,11 +229,11 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 `apl_core_power_on` 进入运行。首次开机（没有手动开过机，或刚恢复出厂设置）档位设为 `APL_DEFAULT_FAN_GEAR`；非首次保持记忆的档位。开机时已缺水，直接按第 5.8 节缺水处理。
 
-`apl_core_power_off` 进入待机。从非待机进入待机时，清掉剩余定时、恒湿目标（回到 OF）和配网，退出极速，然后调用 ops 里的 `on_power_off` 一次。已经待机时再调用，不再发回调。童锁在人机，宿主在 `on_power_off` 里调用 `apl_hmi_child_lock_set` 把它关掉。宿主直接调用 `apl_core_power_off` 不经过风干；面板的电源键走 `APL_LINK_CMD_POWER`。
+`apl_core_power_off` 进入待机。从非待机进入待机时，清掉剩余定时、恒湿目标（回到 OF）和配网，退出极速，然后调用 ops 里的 `on_power_off` 一次。已经待机时再调用，不再发回调。童锁在人机，宿主在 `on_power_off` 里调用 `apl_hmi_set_child_lock` 把它关掉。宿主直接调用 `apl_core_power_off` 不经过风干；面板的电源键走 `APL_LINK_CMD_POWER`。
 
-关机风干：运行中收到 `APL_LINK_CMD_POWER` 且加湿启用时，进入风干，停泵，风机按 `APL_CORE_DRY_FAN_GEAR` 运行 `APL_CORE_DRY_S` 秒，到时关机。风干中 `APL_LINK_CMD_DRY_STOP` 立即关机。风干中电源键短按被拒绝。
+关机风干：运行中收到 `APL_LINK_CMD_POWER` 且加湿启用时，进入风干，停泵，风机按 `APL_CORE_DRY_FAN_GEAR` 运行 `APL_CORE_DRY_S` 秒，到时关机。风干中 `APL_LINK_CMD_DRY_STOP` 立即关机。风干中电源键短按重新开机，清除风干倒计时并恢复用户档位；长按仍立即结束风干进入待机。
 
-定时是 `apl_core` 的内部对象。宿主用 `apl_core_timer_set` 可以做定时开机或关机；面板用 `APL_LINK_CMD_TIMER_SET` 按小时设定，到时整机关机进入待机，不走风干。
+定时是 `apl_core` 的内部对象。宿主用 `apl_core_set_timer` 可以做定时开机或关机；面板用 `APL_LINK_CMD_TIMER_SET` 按小时设定，到时整机关机进入待机，不走风干。
 
 掉电记忆：需要保存的内容是 `struct apl_core_memory`：滤网累计秒数、档位、是否在运行、是否用过、净化和加湿开关、产测未完成标志。内容变化时主控调用 ops 的 `memory_save`；滤网计时每满一小时存一次。宿主上电后在第一拍之前调用 `apl_core_memory_restore`：产测未完成则先恢复出厂设置；掉电前在运行则自动开机；风干中掉电不算运行，保持待机。定时、童锁、恒湿不保存。
 
@@ -242,15 +242,15 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 ```c
 void apl_core_power_on(struct apl_core *self);
 void apl_core_power_off(struct apl_core *self);
-enum apl_power apl_core_power_get(const struct apl_core *self);
-void apl_core_timer_set(struct apl_core *self,
+enum apl_power apl_core_get_power(const struct apl_core *self);
+void apl_core_set_timer(struct apl_core *self,
                         uint32_t seconds,
                         void (*on_timer)(struct apl_core *self, void *ctx),
                         void *ctx);
-uint32_t apl_core_timer_get(struct apl_core *self);
+uint32_t apl_core_get_timer(struct apl_core *self);
 ```
 
-`apl_core_power_on` 开机。`apl_core_power_off` 关机。`apl_core_power_get` 读取整机状态。`apl_core_timer_set` 设置定时，`seconds` 的单位是秒，`on_timer` 到时调用，并传入 `self` 和 `ctx`。定时开机时，回调里调用 `apl_core_power_on`。定时关机时，回调里调用 `apl_core_power_off`。`on_timer` 为空则到时不调用。再次调用按新的秒数和回调重新设定。`apl_core_timer_get` 返回剩余的计时秒数；没有定时时返回 `0`。面板按小时设置走 `APL_LINK_CMD_TIMER_SET`，1 小时等于 3600 秒，0 取消。传入 `0` 表示没有定时，到时回调不触发。
+`apl_core_power_on` 开机。`apl_core_power_off` 关机。`apl_core_get_power` 读取整机状态。`apl_core_set_timer` 设置定时，`seconds` 的单位是秒，`on_timer` 到时调用，并传入 `self` 和 `ctx`。定时开机时，回调里调用 `apl_core_power_on`。定时关机时，回调里调用 `apl_core_power_off`。`on_timer` 为空则到时不调用。再次调用按新的秒数和回调重新设定。`apl_core_get_timer` 返回剩余的计时秒数；没有定时时返回 `0`。面板按小时设置走 `APL_LINK_CMD_TIMER_SET`，1 小时等于 3600 秒，0 取消。传入 `0` 表示没有定时，到时回调不触发。
 
 使用方每 10 ms 调用一次 `apl_tick`，其中先调用 `apl_core_tick`。剩余秒数每 100 拍减 1。关机期间定时也走，到时回调里可以开机。
 
@@ -270,11 +270,11 @@ uint32_t apl_core_timer_get(struct apl_core *self);
 | `APL_FAN_GEAR_TURBO` | 极速 |
 
 ```c
-void apl_core_fan_gear_set(struct apl_core *self, enum apl_fan_gear gear);
-enum apl_fan_gear apl_core_fan_gear_get(const struct apl_core *self);
+void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear);
+enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self);
 ```
 
-`apl_core_fan_gear_set` 记下用户档位。实际输出 `fan_output` 按下列顺序决定，有变化时调用 ops 的 `fan_set`：
+`apl_core_set_fan_gear` 记下用户档位。实际输出 `fan_output` 按下列顺序决定，有变化时调用 ops 的 `set_fan`：
 
 1. 待机：风机停。风干：`APL_CORE_DRY_FAN_GEAR`。
 2. 极速、睡眠：原样输出。
@@ -286,7 +286,7 @@ enum apl_fan_gear apl_core_fan_gear_get(const struct apl_core *self);
 
 ### 5.3 空气净化
 
-`APL_COMPILE_PURIFY` 为 1 时编入，动态配置启用后才运行。净化复合功能由 `APL_LINK_CMD_PURIFY_TOGGLE` 开关，默认关。运行中且开着时负离子开；UV 另需安全微动开关闭合（`uv_interlock_get`）。UV 开着时联锁断开，立即关 UV，`uv_fault` 置 1，发 `APL_BEEP_UV_ALARM`；重新打开净化才清除。
+`APL_COMPILE_PURIFY` 为 1 时编入，动态配置启用后才运行。净化复合功能由 `APL_LINK_CMD_PURIFY_TOGGLE` 开关，默认关。运行中且开着时负离子开；UV 另需安全微动开关闭合（`get_uv_interlock`）。UV 开着时联锁断开，立即关 UV，`uv_fault` 置 1，发 `APL_BEEP_UV_ALARM`；重新打开净化才清除。
 
 空气质量每秒取一次，取各传感器中最差一项：
 
@@ -331,11 +331,11 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 | `uv`    | `APL_SWITCH_OFF`、`APL_SWITCH_ON` |
 | `anion` | `APL_SWITCH_OFF`、`APL_SWITCH_ON` |
 
-开关是 `struct apl_core_ops` 里的 `uv_set`、`anion_set`，由宿主实现。APL 要改变开关时调用它们。`state` 只能是 `APL_SWITCH_OFF` 或 `APL_SWITCH_ON`。何时打开、关闭，见第 5.3 节。
+开关是 `struct apl_core_ops` 里的 `set_uv`、`set_anion`，由宿主实现。APL 要改变开关时调用它们。`state` 只能是 `APL_SWITCH_OFF` 或 `APL_SWITCH_ON`。何时打开、关闭，见第 5.3 节。
 
 ### 5.8 水位检测
 
-水位检测是 `apl_core` 的内部对象，使用方不单独实例化。水位为四段，`water_level_get` 返回当前点亮段数。
+水位检测是 `apl_core` 的内部对象，使用方不单独实例化。水位为四段，`get_water_level` 返回当前点亮段数。
 
 | 返回值                | 含义             |
 | --------------------- | ---------------- |
@@ -345,7 +345,7 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 | `APL_WATER_LEVEL_3` | 由低到高点亮三段 |
 | `APL_WATER_LEVEL_4` | 四段全亮         |
 
-水位读取和两路回调是 `struct apl_core_ops` 里的 `water_level_get`、`water_on_trigger`、`water_on_recover`。`water_level_get` 由宿主实现。APL 需要当前水位时调用它，不在库内保存一份给宿主读取的水位。`apl_core_tick` 每拍采样一次。第一次采到的合法水位只作为边沿起点，不发回调。从 1 及以上降到 0 时，调用 `water_on_trigger` 一次。从 0 升到 1 及以上时，调用 `water_on_recover` 一次。调用时把 `self` 和 `ctx` 原样传入。只在 1 到 4 之间变化时，不调用这两路回调。返回值不是 0 到 4 时，这一拍丢弃，不改起点。
+水位读取和两路回调是 `struct apl_core_ops` 里的 `get_water_level`、`water_on_trigger`、`water_on_recover`。`get_water_level` 由宿主实现。APL 需要当前水位时调用它，不在库内保存一份给宿主读取的水位。`apl_core_tick` 每拍采样一次。第一次采到的合法水位只作为边沿起点，不发回调。从 1 及以上降到 0 时，调用 `water_on_trigger` 一次。从 0 升到 1 及以上时，调用 `water_on_recover` 一次。调用时把 `self` 和 `ctx` 原样传入。只在 1 到 4 之间变化时，不调用这两路回调。返回值不是 0 到 4 时，这一拍丢弃，不改起点。
 
 加湿启用时的缺水逻辑：
 
@@ -361,9 +361,9 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 
 | ops                 | 返回         | 单位                 |
 | ------------------- | ------------ | -------------------- |
-| `pm25_get`        | `uint16_t` | μg/m³，整数        |
-| `humidity_get`    | `uint8_t`  | 相对湿度，整数百分比 |
-| `temperature_get` | `int16_t`  | 摄氏度，整数         |
+| `get_pm25`        | `uint16_t` | μg/m³，整数        |
+| `get_humidity`    | `uint8_t`  | 相对湿度，整数百分比 |
+| `get_temperature` | `int16_t`  | 摄氏度，整数         |
 
 运行中每秒读一次：净化启用时读 PM2.5（及选配的 PM10、甲醛、TVOC），加湿启用时读湿度。温度目前没有业务使用。取值范围待定。
 
@@ -373,8 +373,8 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 
 | 对象         | 编译条件                      | 重置 | 读取 |
 | ------------ | ----------------------------- | ---- | ---- |
-| 净化滤芯计时 | `APL_COMPILE_PURIFY` 为 1   | `apl_core_filter_purify_reset` | `apl_core_filter_purify_get` |
-| 加湿滤网计时 | `APL_COMPILE_HUMIDIFY` 为 1 | `apl_core_filter_humidify_reset` | `apl_core_filter_humidify_get` |
+| 净化滤芯计时 | `APL_COMPILE_PURIFY` 为 1   | `apl_core_filter_purify_reset` | `apl_core_get_filter_purify` |
+| 加湿滤网计时 | `APL_COMPILE_HUMIDIFY` 为 1 | `apl_core_filter_humidify_reset` | `apl_core_get_filter_humidify` |
 
 计时单位为秒，只在运行（含产测）中累计，启用的那一套才走。寿命 `APL_CORE_FILTER_LIFE_H` 小时；快照给出剩余 1～99（向上取整），到期为 0。宿主的 `*_reset` 只清零计数；面板走 `APL_LINK_CMD_FILTER_RESET`：
 
@@ -383,11 +383,11 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 3. 有到期的：`filter_reset_forced` 为 0，发 `APL_BEEP_FILTER_RESET`（500 ms）。都未到期：`filter_reset_forced` 为 1，发 `APL_BEEP_FILTER_FORCED`（300 ms），人机让红灯闪 3 次。
 4. `filter_reset_seq` 加 1。
 
-功能是否启用分别由 `apl_core_purify_enabled_get`、`apl_core_humidify_enabled_get` 读取，修改入口尚未规定。
+功能是否启用分别由 `apl_core_get_purify_enabled`、`apl_core_get_humidify_enabled` 读取，修改入口尚未规定。
 
 ### 5.11 Wi-Fi
 
-`APL_LINK_CMD_WIFI_PAIR` 进入配网，`APL_CORE_WIFI_PAIR_S` 秒未联网退出。宿主用 `apl_core_wifi_connected_set` 报告联网状态。关机、风干退出配网。
+`APL_LINK_CMD_WIFI_PAIR` 进入配网，`APL_CORE_WIFI_PAIR_S` 秒未联网退出。宿主用 `apl_core_set_wifi_connected` 报告联网状态。关机、风干退出配网。
 
 ### 5.12 产测与恢复出厂设置
 
@@ -404,7 +404,7 @@ UV 和负离子各是 `apl_core` 的一个内部对象，使用方不单独实�
 
 1. 首次开机档位取一档（三张机型表、更改记录第 2、7 条），汇总表写二档。宏 `APL_DEFAULT_FAN_GEAR`。
 2. 定时到期直接待机，不走风干。原表只写「关机进入待机」。
-3. 风干中电源键短按被拒绝。原表没写。
+3. 原表未规定风干中电源键短按；当前采用短按恢复运行、长按结束风干，避免无法通过正常电源操作恢复使用。
 4. 缺水后 30 分钟内停泵、风机照常（水位表备注「缺水时停止加湿输出」）。
 5. 自动档与空气质量的对应（优一、良二、中重三），只加湿时自动档二档。原表未给。
 6. 恒湿生效时覆盖手动一至三档；睡眠、极速不覆盖。一体机自动档取较大者。

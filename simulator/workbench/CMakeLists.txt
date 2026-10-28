@@ -17,14 +17,44 @@ qt_add_executable(apl_workbench
     src/apl_platform.h src/apl_platform.cpp
     src/apl_memory.h src/apl_memory.cpp
     src/frontend_catalog.h src/frontend_catalog.cpp
-    src/workbench_window.h src/workbench_window.cpp
+    src/workbench_window.h src/workbench_window.cpp src/workbench_product.cpp
+    src/apl_runtime.h src/apl_runtime.cpp
+    src/product_dialog.h src/product_dialog.cpp
+    src/studio_theme.h src/studio_theme.cpp
+    src/sdk_preview.h src/sdk_preview.cpp
 )
 qt_add_resources(apl_workbench panels
     PREFIX "/panels"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/frontends"
     FILES frontends/round/RoundPanel.qml frontends/bench/KeyBench.qml
 )
-target_link_libraries(apl_workbench PRIVATE Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickWidgets apl)
+qt_add_resources(apl_workbench studio_assets PREFIX "/studio" BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    FILES assets/chevron-down.svg assets/chevron-up.svg)
+add_library(apl_product STATIC src/product_config.h src/product_config.cpp src/sdk_generator.h src/sdk_generator.cpp
+    src/apl_source.h src/apl_source.cpp)
+get_filename_component(APL_ABSOLUTE_ROOT "${APL_ROOT}" ABSOLUTE)
+target_compile_definitions(apl_product PRIVATE "APL_SOURCE_ROOT=\"${APL_ABSOLUTE_ROOT}\"")
+target_link_libraries(apl_product PUBLIC Qt6::Core)
+target_include_directories(apl_product PUBLIC src)
+target_compile_options(apl_product PRIVATE -Wall -Wextra -Werror -finput-charset=UTF-8)
+function(apl_sdk_resources target)
+    set(payload "${CMAKE_CURRENT_BINARY_DIR}/sdk-payload")
+    set(payload_files)
+    foreach(path IN ITEMS include/apl.h include/apl_core.h include/apl_hmi.h include/apl_type.h
+            config/apl_core_config.h config/apl_hmi_config.h src/apl.c src/apl_core.c src/apl_hmi.c)
+        configure_file("${APL_ROOT}/${path}" "${payload}/${path}" COPYONLY)
+        list(APPEND payload_files "${payload}/${path}")
+    endforeach()
+    qt_add_resources(${target} sdk_sources PREFIX "/sdk" BASE "${payload}" FILES ${payload_files})
+    qt_add_resources(${target} sdk_templates PREFIX "/sdk-templates" BASE "${CMAKE_CURRENT_SOURCE_DIR}/sdk_templates"
+        FILES sdk_templates/port/apl_port.h sdk_templates/port/apl_port.c
+        sdk_templates/examples/app.c sdk_templates/CMakeLists.txt sdk_templates/README.md)
+endfunction()
+apl_sdk_resources(apl_workbench)
+file(TO_CMAKE_PATH "${CMAKE_C_COMPILER}" APL_NATIVE_CC)
+target_compile_definitions(apl_workbench PRIVATE "APL_PREVIEW_COMPILER=\"${APL_NATIVE_CC}\"")
+
+target_link_libraries(apl_workbench PRIVATE Qt6::Widgets Qt6::Qml Qt6::Quick Qt6::QuickWidgets apl apl_product)
 target_compile_options(apl_workbench PRIVATE -Wall -Wextra -Werror -finput-charset=UTF-8 -fexec-charset=UTF-8)
 target_compile_definitions(apl_workbench PRIVATE "APL_QT_PREFIX=\"${APL_QT_PREFIX}\"")
 set_target_properties(apl_workbench PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -62,5 +92,12 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME apl_link_${mode} COMMAND apl_link_${mode}_test)
     endforeach()
+    add_executable(apl_sdk_test tests/apl_sdk_test.cpp src/apl_runtime.cpp src/apl_runtime.h)
+    target_link_libraries(apl_sdk_test PRIVATE apl_product apl Qt6::Core)
+    target_compile_options(apl_sdk_test PRIVATE -Wall -Wextra -Werror -finput-charset=UTF-8)
+    target_compile_definitions(apl_sdk_test PRIVATE "APL_PREVIEW_COMPILER=\"${APL_NATIVE_CC}\"")
+    apl_sdk_resources(apl_sdk_test)
+    add_test(NAME apl_sdk COMMAND apl_sdk_test)
+    set_tests_properties(apl_sdk PROPERTIES TIMEOUT 120)
     add_test(NAME workbench COMMAND apl_workbench --self-test)
 endif()

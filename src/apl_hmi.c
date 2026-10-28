@@ -430,6 +430,11 @@ static void apl_hmi_emit(struct apl_hmi *self,
         }
     }
 
+    if ((NULL != state->ops) && (NULL != state->ops->key_event))
+    {
+        state->ops->key_event((enum apl_hmi_key_id)index, is_long, state->ctx);
+    }
+
     if (NULL != state->panel.send)
     {
         apl_hmi_panel_key(self, state, index, is_long);
@@ -633,10 +638,10 @@ void apl_hmi_tick(struct apl_hmi *self)
     }
 
     state = apl_hmi_state_of(self);
-    if ((NULL != state->ops) && (NULL != state->ops->key_state_get))
+    if ((NULL != state->ops) && (NULL != state->ops->get_key_state))
     {
         memset(&keys, 0, sizeof(keys));
-        state->ops->key_state_get(&keys, state->ctx);
+        state->ops->get_key_state(&keys, state->ctx);
         down_mask = apl_hmi_sample(state, &keys);
         locked = (uint8_t)(APL_HMI_CHILD_LOCK_ON == state->child_lock);
         suppress = apl_hmi_combos_update(self, state, down_mask, locked);
@@ -654,7 +659,7 @@ void apl_hmi_tick(struct apl_hmi *self)
     apl_hmi_buzzer_tick(state);
 }
 
-uint8_t apl_hmi_powerup_lamp_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_powerup_lamp(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -664,7 +669,7 @@ uint8_t apl_hmi_powerup_lamp_get(const struct apl_hmi *self)
     return (uint8_t)(0u != apl_hmi_state_of_const(self)->powerup_lamp_ticks);
 }
 
-void apl_hmi_key_lamp_set(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t brightness)
+void apl_hmi_set_key_lamp(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t brightness)
 {
     struct apl_hmi_state *state;
 
@@ -682,7 +687,7 @@ void apl_hmi_key_lamp_set(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t
     state->key[key].brightness = brightness;
 }
 
-uint8_t apl_hmi_key_lamp_get(const struct apl_hmi *self, enum apl_hmi_key_id key)
+uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key)
 {
     if ((NULL == self) || (0u == apl_hmi_key_is_valid(key)))
     {
@@ -692,7 +697,7 @@ uint8_t apl_hmi_key_lamp_get(const struct apl_hmi *self, enum apl_hmi_key_id key
     return apl_hmi_state_of_const(self)->key[key].brightness;
 }
 
-void apl_hmi_key_callback_set(struct apl_hmi *self,
+void apl_hmi_set_key_callback(struct apl_hmi *self,
                               enum apl_hmi_key_id key,
                               void (*on_short)(struct apl_hmi *key_self, void *key_ctx),
                               void (*on_long)(struct apl_hmi *key_self, void *key_ctx),
@@ -711,7 +716,7 @@ void apl_hmi_key_callback_set(struct apl_hmi *self,
     slot->ctx = ctx;
 }
 
-void apl_hmi_ambient_brightness_set(struct apl_hmi *self, uint8_t brightness)
+void apl_hmi_set_ambient_brightness(struct apl_hmi *self, uint8_t brightness)
 {
     if (NULL == self)
     {
@@ -721,7 +726,7 @@ void apl_hmi_ambient_brightness_set(struct apl_hmi *self, uint8_t brightness)
     apl_hmi_state_of(self)->ambient_brightness = brightness;
 }
 
-uint8_t apl_hmi_ambient_brightness_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -731,7 +736,7 @@ uint8_t apl_hmi_ambient_brightness_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->ambient_brightness;
 }
 
-void apl_hmi_ambient_color_set(struct apl_hmi *self,
+void apl_hmi_set_ambient_color(struct apl_hmi *self,
                                uint8_t red,
                                uint8_t green,
                                uint8_t blue)
@@ -749,7 +754,7 @@ void apl_hmi_ambient_color_set(struct apl_hmi *self,
     state->ambient_blue = blue;
 }
 
-void apl_hmi_ambient_color_get(const struct apl_hmi *self,
+void apl_hmi_get_ambient_color(const struct apl_hmi *self,
                                uint8_t *red,
                                uint8_t *green,
                                uint8_t *blue)
@@ -787,7 +792,7 @@ void apl_hmi_ambient_color_get(const struct apl_hmi *self,
     }
 }
 
-void apl_hmi_water_lamp_set(struct apl_hmi *self, uint8_t index, uint8_t brightness)
+void apl_hmi_set_water_lamp(struct apl_hmi *self, uint8_t index, uint8_t brightness)
 {
     if ((NULL == self) || (0u == index) || (index > APL_HMI_WATER_LAMP_COUNT))
     {
@@ -797,7 +802,7 @@ void apl_hmi_water_lamp_set(struct apl_hmi *self, uint8_t index, uint8_t brightn
     apl_hmi_state_of(self)->water[index - 1u] = brightness;
 }
 
-uint8_t apl_hmi_water_lamp_get(const struct apl_hmi *self, uint8_t index)
+uint8_t apl_hmi_get_water_lamp(const struct apl_hmi *self, uint8_t index)
 {
     if ((NULL == self) || (0u == index) || (index > APL_HMI_WATER_LAMP_COUNT))
     {
@@ -807,7 +812,7 @@ uint8_t apl_hmi_water_lamp_get(const struct apl_hmi *self, uint8_t index)
     return apl_hmi_state_of_const(self)->water[index - 1u];
 }
 
-void apl_hmi_digits_brightness_set(struct apl_hmi *self, uint8_t brightness)
+void apl_hmi_set_digits_brightness(struct apl_hmi *self, uint8_t brightness)
 {
     if (NULL == self)
     {
@@ -817,7 +822,7 @@ void apl_hmi_digits_brightness_set(struct apl_hmi *self, uint8_t brightness)
     apl_hmi_state_of(self)->digit_brightness = brightness;
 }
 
-uint8_t apl_hmi_digits_brightness_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_digits_brightness(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -827,7 +832,7 @@ uint8_t apl_hmi_digits_brightness_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->digit_brightness;
 }
 
-void apl_hmi_digits_content_set(struct apl_hmi *self,
+void apl_hmi_set_digits_content(struct apl_hmi *self,
                                 const char content[APL_HMI_DIGIT_COUNT])
 {
     if ((NULL == self) || (NULL == content))
@@ -838,7 +843,7 @@ void apl_hmi_digits_content_set(struct apl_hmi *self,
     memcpy(apl_hmi_state_of(self)->digit_content, content, APL_HMI_DIGIT_COUNT);
 }
 
-void apl_hmi_digits_content_get(const struct apl_hmi *self,
+void apl_hmi_get_digits_content(const struct apl_hmi *self,
                                 char content[APL_HMI_DIGIT_COUNT])
 {
     if (NULL == content)
@@ -855,7 +860,7 @@ void apl_hmi_digits_content_get(const struct apl_hmi *self,
     memcpy(content, apl_hmi_state_of_const(self)->digit_content, APL_HMI_DIGIT_COUNT);
 }
 
-void apl_hmi_digits_unit_set(struct apl_hmi *self, enum apl_hmi_unit unit)
+void apl_hmi_set_digits_unit(struct apl_hmi *self, enum apl_hmi_unit unit)
 {
     if ((NULL == self) || (0u == apl_hmi_unit_is_valid(unit)))
     {
@@ -865,7 +870,7 @@ void apl_hmi_digits_unit_set(struct apl_hmi *self, enum apl_hmi_unit unit)
     apl_hmi_state_of(self)->digit_unit = unit;
 }
 
-enum apl_hmi_unit apl_hmi_digits_unit_get(const struct apl_hmi *self)
+enum apl_hmi_unit apl_hmi_get_digits_unit(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -875,7 +880,7 @@ enum apl_hmi_unit apl_hmi_digits_unit_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->digit_unit;
 }
 
-void apl_hmi_child_lock_set(struct apl_hmi *self, enum apl_hmi_child_lock lock)
+void apl_hmi_set_child_lock(struct apl_hmi *self, enum apl_hmi_child_lock lock)
 {
     if ((NULL == self) || (0u == apl_hmi_child_lock_is_valid(lock)))
     {
@@ -885,7 +890,7 @@ void apl_hmi_child_lock_set(struct apl_hmi *self, enum apl_hmi_child_lock lock)
     apl_hmi_state_of(self)->child_lock = lock;
 }
 
-enum apl_hmi_child_lock apl_hmi_child_lock_get(const struct apl_hmi *self)
+enum apl_hmi_child_lock apl_hmi_get_child_lock(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -895,7 +900,7 @@ enum apl_hmi_child_lock apl_hmi_child_lock_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->child_lock;
 }
 
-void apl_hmi_purify_enabled_set(struct apl_hmi *self, uint8_t enabled)
+void apl_hmi_set_purify_enabled(struct apl_hmi *self, uint8_t enabled)
 {
     if ((NULL == self) || (0u == apl_hmi_enabled_is_valid(enabled)))
     {
@@ -905,7 +910,7 @@ void apl_hmi_purify_enabled_set(struct apl_hmi *self, uint8_t enabled)
     apl_hmi_state_of(self)->purify_enabled = enabled;
 }
 
-uint8_t apl_hmi_purify_enabled_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_purify_enabled(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -915,7 +920,7 @@ uint8_t apl_hmi_purify_enabled_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->purify_enabled;
 }
 
-void apl_hmi_humidify_enabled_set(struct apl_hmi *self, uint8_t enabled)
+void apl_hmi_set_humidify_enabled(struct apl_hmi *self, uint8_t enabled)
 {
     if ((NULL == self) || (0u == apl_hmi_enabled_is_valid(enabled)))
     {
@@ -925,7 +930,7 @@ void apl_hmi_humidify_enabled_set(struct apl_hmi *self, uint8_t enabled)
     apl_hmi_state_of(self)->humidify_enabled = enabled;
 }
 
-uint8_t apl_hmi_humidify_enabled_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_humidify_enabled(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -935,7 +940,7 @@ uint8_t apl_hmi_humidify_enabled_get(const struct apl_hmi *self)
     return apl_hmi_state_of_const(self)->humidify_enabled;
 }
 
-int apl_hmi_combo_set(struct apl_hmi *self,
+int apl_hmi_set_combo(struct apl_hmi *self,
                       const enum apl_hmi_key_id *keys,
                       uint8_t key_count,
                       uint16_t hold_ms,
@@ -1018,7 +1023,7 @@ static uint8_t apl_hmi_icon_is_valid(enum apl_hmi_icon icon)
     return ((uint32_t)icon < (uint32_t)APL_HMI_ICON_COUNT) ? 1u : 0u;
 }
 
-void apl_hmi_icon_set(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brightness)
+void apl_hmi_set_icon(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brightness)
 {
     if ((NULL == self) || (0u == apl_hmi_icon_is_valid(icon)))
     {
@@ -1028,7 +1033,7 @@ void apl_hmi_icon_set(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brig
     apl_hmi_state_of(self)->icon[icon] = brightness;
 }
 
-uint8_t apl_hmi_icon_get(const struct apl_hmi *self, enum apl_hmi_icon icon)
+uint8_t apl_hmi_get_icon(const struct apl_hmi *self, enum apl_hmi_icon icon)
 {
     if ((NULL == self) || (0u == apl_hmi_icon_is_valid(icon)))
     {
@@ -1038,7 +1043,7 @@ uint8_t apl_hmi_icon_get(const struct apl_hmi *self, enum apl_hmi_icon icon)
     return apl_hmi_state_of_const(self)->icon[icon];
 }
 
-void apl_hmi_water_color_set(struct apl_hmi *self, enum apl_hmi_water_color color)
+void apl_hmi_set_water_color(struct apl_hmi *self, enum apl_hmi_water_color color)
 {
     if ((NULL == self) || ((APL_HMI_WATER_GREEN != color) && (APL_HMI_WATER_ORANGE != color)))
     {
@@ -1048,7 +1053,7 @@ void apl_hmi_water_color_set(struct apl_hmi *self, enum apl_hmi_water_color colo
     apl_hmi_state_of(self)->water_color = color;
 }
 
-enum apl_hmi_water_color apl_hmi_water_color_get(const struct apl_hmi *self)
+enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -1071,9 +1076,9 @@ static void apl_hmi_buzzer_write(struct apl_hmi_state *state, uint8_t on)
     }
 
     state->buzz_on = on;
-    if ((NULL != state->ops) && (NULL != state->ops->buzzer_set))
+    if ((NULL != state->ops) && (NULL != state->ops->set_buzzer))
     {
-        state->ops->buzzer_set(on, state->ctx);
+        state->ops->set_buzzer(on, state->ctx);
     }
 }
 
@@ -1098,7 +1103,7 @@ void apl_hmi_buzzer_play(struct apl_hmi *self, uint8_t count, uint16_t on_ms, ui
     }
 }
 
-uint8_t apl_hmi_buzzer_busy_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_buzzer_busy(const struct apl_hmi *self)
 {
     if (NULL == self)
     {
@@ -1900,13 +1905,13 @@ void apl_hmi_link_bind(struct apl_hmi *self,
         return;
     }
 
-    (void)apl_hmi_combo_set(self, filter_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
+    (void)apl_hmi_set_combo(self, filter_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
                             apl_hmi_panel_combo_filter, NULL);
-    (void)apl_hmi_combo_set(self, factory_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
+    (void)apl_hmi_set_combo(self, factory_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
                             apl_hmi_panel_combo_factory, NULL);
 }
 
-void apl_hmi_snapshot_set(struct apl_hmi *self, const struct apl_link_snapshot *snapshot)
+void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *snapshot)
 {
     struct apl_hmi_state *state;
 
@@ -1943,7 +1948,7 @@ void apl_hmi_filter_query(struct apl_hmi *self)
     apl_hmi_state_of(self)->panel.query_ticks = APL_HMI_IDLE_TICKS;
 }
 
-uint8_t apl_hmi_light_get(const struct apl_hmi *self)
+uint8_t apl_hmi_get_light(const struct apl_hmi *self)
 {
     if (NULL == self)
     {

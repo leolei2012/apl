@@ -2,6 +2,7 @@
 
 #include "frontend_catalog.h"
 #include "apl_memory.h"
+#include "apl_runtime.h"
 
 #include <QElapsedTimer>
 #include <QObject>
@@ -29,6 +30,10 @@ class AplPlatform : public QObject
     Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY frameChanged)
     Q_PROPERTY(bool supplied READ supplied WRITE setSupplied NOTIFY suppliedChanged)
     Q_PROPERTY(bool powerOn READ powerOn NOTIFY frameChanged)
+    Q_PROPERTY(int runState READ runState NOTIFY frameChanged)
+    Q_PROPERTY(QString runStateText READ runStateText NOTIFY frameChanged)
+    Q_PROPERTY(int drySeconds READ drySeconds NOTIFY frameChanged)
+    Q_PROPERTY(QString interactionHint READ interactionHint NOTIFY frameChanged)
     Q_PROPERTY(int gear READ gear NOTIFY frameChanged)
     Q_PROPERTY(QString gearName READ gearName NOTIFY frameChanged)
     Q_PROPERTY(int timerSeconds READ timerSeconds NOTIFY frameChanged)
@@ -38,6 +43,8 @@ class AplPlatform : public QObject
     Q_PROPERTY(QString message READ message NOTIFY frameChanged)
     Q_PROPERTY(QVariantList keyLamps READ keyLamps NOTIFY frameChanged)
     Q_PROPERTY(QVariantList waterLamps READ waterLamps NOTIFY frameChanged)
+    Q_PROPERTY(QVariantList iconLamps READ iconLamps NOTIFY frameChanged)
+    Q_PROPERTY(int waterColor READ waterColor NOTIFY frameChanged)
     Q_PROPERTY(QString digits READ digits NOTIFY frameChanged)
     Q_PROPERTY(int digitBrightness READ digitBrightness NOTIFY frameChanged)
     Q_PROPERTY(int digitUnit READ digitUnit NOTIFY frameChanged)
@@ -47,6 +54,8 @@ class AplPlatform : public QObject
     Q_PROPERTY(int ambientBlue READ ambientBlue NOTIFY frameChanged)
     Q_PROPERTY(bool purifyEnabled READ purifyEnabled NOTIFY frameChanged)
     Q_PROPERTY(bool humidifyEnabled READ humidifyEnabled NOTIFY frameChanged)
+    Q_PROPERTY(bool purifyOn READ purifyOn NOTIFY frameChanged)
+    Q_PROPERTY(bool humidifyOn READ humidifyOn NOTIFY frameChanged)
     Q_PROPERTY(QString fanText READ fanText NOTIFY frameChanged)
     Q_PROPERTY(QString humidifierText READ humidifierText NOTIFY frameChanged)
     Q_PROPERTY(QString uvText READ uvText NOTIFY frameChanged)
@@ -73,6 +82,7 @@ public:
     explicit AplPlatform(QObject *parent = nullptr);
 
     void start();
+    bool loadRuntime(const QString &path, QString *error, std::shared_ptr<QTemporaryDir> directory = {});
     bool openMemory(const QString &path);
     bool memoryRead(uint32_t offset,uint8_t *data,uint32_t length) const;
     bool memoryWrite(uint32_t offset,const uint8_t *data,uint32_t length);
@@ -86,10 +96,17 @@ public:
     bool paused() const { return m_paused; }
     void setPaused(bool value);
     void advance(int count);
+    void queryFilter();
 
     bool supplied() const;
     void setSupplied(bool on);
     bool powerOn() const;
+    int runState() const { return m_runState; }
+    QString runStateText() const;
+    int drySeconds() const { return m_drySeconds; }
+    QString interactionHint() const;
+    bool purifyOn() const { return m_purifyOn; }
+    bool humidifyOn() const { return m_humidifyOn; }
     int gear() const;
     QString gearName() const;
     int timerSeconds() const;
@@ -99,6 +116,8 @@ public:
     QString message() const;
     QVariantList keyLamps() const;
     QVariantList waterLamps() const;
+    QVariantList iconLamps() const { return m_iconLamps; }
+    int waterColor() const { return m_waterColor; }
     QString digits() const;
     int digitBrightness() const;
     int digitUnit() const;
@@ -151,12 +170,6 @@ signals:
     void eventsChanged();
 
 private:
-    struct KeySlot
-    {
-        AplPlatform *platform;
-        int key;
-    };
-
     struct Snapshot
     {
         std::array<int, APL_HMI_KEY_COUNT> keys;
@@ -166,25 +179,23 @@ private:
         int bright;
     };
 
-    static enum apl_water_level waterLevelGet(void *ctx);
-    static uint16_t pm25Get(void *ctx);
-    static uint8_t humidityGet(void *ctx);
-    static int16_t temperatureGet(void *ctx);
+    static enum apl_water_level getWaterLevel(void *ctx);
+    static uint16_t getPm25(void *ctx);
+    static uint8_t getHumidity(void *ctx);
+    static int16_t getTemperature(void *ctx);
     static void waterTrigger(struct apl_core *core, void *ctx);
     static void waterRecover(struct apl_core *core, void *ctx);
-    static void uvSet(enum apl_switch state, void *ctx);
-    static void anionSet(enum apl_switch state, void *ctx);
+    static void setFan(enum apl_switch state, enum apl_fan_gear gear, void *ctx);
+    static void setPump(enum apl_switch state, void *ctx);
+    static void setUv(enum apl_switch state, void *ctx);
+    static void setAnion(enum apl_switch state, void *ctx);
     static void powerOffEvent(struct apl_core *core, void *ctx);
-    static void keyStateGet(struct apl_hmi_key_state *state, void *ctx);
-    static void onTimer(struct apl_core *core, void *ctx);
-    static void onShort(struct apl_hmi *hmi, void *ctx);
-    static void onLong(struct apl_hmi *hmi, void *ctx);
+    static void getKeyState(struct apl_hmi_key_state *state, void *ctx);
+    static void keyEvent(enum apl_hmi_key_id key, uint8_t isLong, void *ctx);
 
     void wireOps();
-    void bindKeys();
     void stepOne();
     void onClock();
-    void publish();
     void pull();
     void observe();
     void flush();
@@ -193,15 +204,13 @@ private:
     void releaseKeys();
     void supplyOff();
     void supplyOn();
-    void handleShort(int key);
-    void handleLong(int key);
-    void handleTimer();
     void applySwitch(bool *known, bool *on, bool next, const QString &label);
     QString readDigits() const;
     QString gearNameFor(int gear) const;
     QString switchText(bool known, bool on) const;
     Snapshot capture() const;
 
+    AplRuntime m_runtime;
     AplMemory m_memory;
     QMap<int,QVariantMap> m_displaySlots;
     bool m_paused = false;
@@ -209,7 +218,6 @@ private:
     struct apl m_apl;
     struct apl_core_ops m_coreOps;
     struct apl_hmi_ops m_hmiOps;
-    std::array<KeySlot, APL_HMI_KEY_COUNT> m_keySlot;
     std::array<bool, APL_HMI_KEY_COUNT> m_down;
     QStringList m_keyNames;
     QTimer m_timer;
@@ -231,6 +239,7 @@ private:
     int m_recovers;
     bool m_fanKnown;
     int m_fanRpm;
+    int m_fanOutputGear = -1;
     bool m_humidifierKnown;
     bool m_humidifierOn;
     bool m_uvKnown;
@@ -238,6 +247,10 @@ private:
     bool m_anionKnown;
     bool m_anionOn;
     bool m_powerOn;
+    int m_runState = APL_RUN_STANDBY;
+    int m_drySeconds = 0;
+    bool m_purifyOn = false;
+    bool m_humidifyOn = false;
     int m_gear;
     QString m_gearName;
     int m_timerSeconds;
@@ -248,6 +261,8 @@ private:
     std::array<int, APL_HMI_WATER_LAMP_COUNT> m_waterLampRaw;
     QVariantList m_keyLamps;
     QVariantList m_waterLamps;
+    QVariantList m_iconLamps;
+    int m_waterColor = 0;
     QString m_digits;
     int m_digitBrightness;
     int m_digitUnit;

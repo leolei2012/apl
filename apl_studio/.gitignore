@@ -1,0 +1,6 @@
+node_modules/
+.data/
+apps/web/dist/
+output/
+*.log
+.playwright-cli/

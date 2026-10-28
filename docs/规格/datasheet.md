@@ -27,7 +27,7 @@
 
 ### 1.2 按键
 
-一个按键一个对象。每个按键底下有一盏灯，灯是这个按键的属性。亮度用 `apl_hmi_key_lamp_set`、`apl_hmi_key_lamp_get` 按键编号读写。
+一个按键一个对象。每个按键底下有一盏灯，灯是这个按键的属性。亮度用 `apl_hmi_set_key_lamp`、`apl_hmi_get_key_lamp` 按键编号读写。
 
 | 属性 | 含义 |
 |---|---|
@@ -36,7 +36,7 @@
 | `on_long` | 长按回调。六颗键都有 |
 | `ctx` | 绑定时存下的使用方对象，调用时原样还回 |
 
-回调在初始化之后用 `apl_hmi_key_callback_set` 绑定，一次同时写入短按、长按和 `ctx`。初始为空。签名为：
+回调在初始化之后用 `apl_hmi_set_key_callback` 绑定，一次同时写入短按、长按和 `ctx`。初始为空。签名为：
 
 ```c
 void on_short(struct apl_hmi *self, void *ctx);
@@ -77,7 +77,7 @@ void on_long(struct apl_hmi *self, void *ctx);
 | `lamp.brightness` | 亮度，可单独调。0 表示灭 |
 | `color` | RGB，可单独调。改颜色不改变亮度 |
 
-颜色和亮度各改各的。调色用 `apl_hmi_ambient_color_set`、`apl_hmi_ambient_color_get` 写红、绿、蓝；调亮用 `apl_hmi_ambient_brightness_set`、`apl_hmi_ambient_brightness_get`。改颜色不改变亮度。
+颜色和亮度各改各的。调色用 `apl_hmi_set_ambient_color`、`apl_hmi_get_ambient_color` 写红、绿、蓝；调亮用 `apl_hmi_set_ambient_brightness`、`apl_hmi_get_ambient_brightness`。改颜色不改变亮度。
 
 ### 1.5 数码管
 
@@ -89,25 +89,25 @@ void on_long(struct apl_hmi *self, void *ctx);
 | `content` | 三位显示内容 |
 | `unit` | 当前单位：小时（`H`）、百分比（`%`）、`PM2.5` |
 
-同一时刻一个单位。显示哪一位、哪一个单位，由使用方按主控快照调用 `apl_hmi_digits_brightness_set`、`apl_hmi_digits_content_set`、`apl_hmi_digits_unit_set` 写入。内容恰好三位，不要求以 `\0` 结尾。读取用对应的 get。
+同一时刻一个单位。显示哪一位、哪一个单位，由使用方按主控快照调用 `apl_hmi_set_digits_brightness`、`apl_hmi_set_digits_content`、`apl_hmi_set_digits_unit` 写入。内容恰好三位，不要求以 `\0` 结尾。读取用对应的 get。
 
 ### 1.6 状态图标
 
-中间和底部的符号各是一盏灯，有亮度，用 `apl_hmi_icon_set`、`apl_hmi_icon_get` 按 `enum apl_hmi_icon` 读写：Wi-Fi、滤网白、滤网红、童锁、负离子、UV、恒湿、风干、Sleep、一档、二档、三档、Auto。上电全亮阶段这些图标也全亮。
+中间和底部的符号各是一盏灯，有亮度，用 `apl_hmi_set_icon`、`apl_hmi_get_icon` 按 `enum apl_hmi_icon` 读写：Wi-Fi、滤网白、滤网红、童锁、负离子、UV、恒湿、风干、Sleep、一档、二档、三档、Auto。上电全亮阶段这些图标也全亮。
 
 ### 1.7 蜂鸣器
 
-蜂鸣器由宿主在 `struct apl_hmi_ops` 的 `buzzer_set` 开关。`apl_hmi_buzzer_play` 给出声数、响和停的毫秒数，`apl_hmi_tick` 推进。`apl_hmi_init` 后响一声。
+蜂鸣器由宿主在 `struct apl_hmi_ops` 的 `set_buzzer` 开关。`apl_hmi_buzzer_play` 给出声数、响和停的毫秒数，`apl_hmi_tick` 推进。`apl_hmi_init` 后响一声。
 
 ### 1.8 水位灯
 
-底部中间是四段水位灯，由低到高为第 1 段到第 4 段。每段是一盏灯，有自己的亮度。使用方用 `apl_hmi_water_lamp_set`、`apl_hmi_water_lamp_get` 按段号 1 到 4 读写。点亮段数与 `apl_core` 的水位一致：0 全灭，1 到 4 从最低段往上点亮。只净化时这四段不显示。四段共用一个颜色，绿或橙，用 `apl_hmi_water_color_set`、`apl_hmi_water_color_get` 读写。
+底部中间是四段水位灯，由低到高为第 1 段到第 4 段。每段是一盏灯，有自己的亮度。使用方用 `apl_hmi_set_water_lamp`、`apl_hmi_get_water_lamp` 按段号 1 到 4 读写。点亮段数与 `apl_core` 的水位一致：0 全灭，1 到 4 从最低段往上点亮。只净化时这四段不显示。四段共用一个颜色，绿或橙，用 `apl_hmi_set_water_color`、`apl_hmi_get_water_color` 读写。
 
 ---
 
 ## 2. `struct apl_hmi`
 
-对外只有这一个对象。按键、氛围灯、水位灯和数码管是它的属性。六盏键灯在各自的按键里面。使用方读写这些属性时调用 getter 和 setter，不访问对象里的存储。`struct apl_hmi` 里的字节只给使用方分配实例。按键电平仍由宿主注入的 `key_state_get` 提供。
+对外只有这一个对象。按键、氛围灯、水位灯和数码管是它的属性。六盏键灯在各自的按键里面。使用方读写这些属性时调用 getter 和 setter，不访问对象里的存储。`struct apl_hmi` 里的字节只给使用方分配实例。按键电平仍由宿主注入的 `get_key_state` 提供。
 
 ```text
 struct apl_hmi
@@ -130,13 +130,13 @@ struct apl_hmi
 
 按键认出短按或长按后，调用该键对应的回调，并把 `self` 和 `ctx` 传入。人机不在回调里判断业务。使用方在回调里决定是否形成 `link_command`，或改这台人机上的灯。
 
-净化或加湿未启用时，不调用这两颗键的短按回调，键灯亮度为 0。它们的长按回调是否受同样限制，尚未规定，因此长按仍会发出。使用方按主控快照调用 `apl_hmi_purify_enabled_set`、`apl_hmi_humidify_enabled_set`，参数只能是 0 或 1，读取用对应的 get。初始为 1。未启用时，键灯 setter 立即记成 0，`apl_hmi_tick` 也会把亮度保持为 0。
+净化或加湿未启用时，不调用这两颗键的短按回调，键灯亮度为 0。它们的长按回调是否受同样限制，尚未规定，因此长按仍会发出。使用方按主控快照调用 `apl_hmi_set_purify_enabled`、`apl_hmi_set_humidify_enabled`，参数只能是 0 或 1，读取用对应的 get。初始为 1。未启用时，键灯 setter 立即记成 0，`apl_hmi_tick` 也会把亮度保持为 0。
 
-童锁是这个对象的属性，不是主控状态。使用方用 `apl_hmi_child_lock_set`、`apl_hmi_child_lock_get` 读写。为开时，不发出其他键的短按、长按和组合键；定时键的长按仍然发出，使用方用它解锁。主控的开机、档位、定时等方法不受童锁影响。宿主在主控 `on_power_off` 里把童锁设为关。中间的童锁指示灯尚未建成对象。
+童锁是这个对象的属性，不是主控状态。使用方用 `apl_hmi_set_child_lock`、`apl_hmi_get_child_lock` 读写。为开时，不发出其他键的短按、长按和组合键；定时键的长按仍然发出，使用方用它解锁。主控的开机、档位、定时等方法不受童锁影响。宿主在主控 `on_power_off` 里把童锁设为关。中间的童锁指示灯尚未建成对象。
 
-宿主每 10 ms 调用 `apl_hmi_tick`。按键电平由 `apl_hmi_init` 注入的 `key_state_get` 在同一拍给出六颗键。短按在松开时发出，没有更短的时间下限。按下满 3 秒发出长按一次，这次按下松开时不再补短按。回调为空则不调用。人机不在回调里判断业务。
+宿主每 10 ms 调用 `apl_hmi_tick`。按键电平由 `apl_hmi_init` 注入的 `get_key_state` 在同一拍给出六颗键。短按在松开时发出，没有更短的时间下限。按下满 3 秒发出长按一次，这次按下松开时不再补短按。回调为空则不调用。人机不在回调里判断业务。
 
-组合键单独登记，不改变按键采样。`apl_hmi_combo_set` 给出参与的键、保持时间和回调。这些键都按下时，暂停它们各自的短按和长按；保持时间到了调用一次，这次按下结束。提前松开则取消：已松开的键按自己的按下时间补短按或长按，仍按住的键继续单键计时。库不预登记具体组合。同时最多登记 4 组。
+组合键单独登记，不改变按键采样。`apl_hmi_set_combo` 给出参与的键、保持时间和回调。这些键都按下时，暂停它们各自的短按和长按；保持时间到了调用一次，这次按下结束。提前松开则取消：已松开的键按自己的按下时间补短按或长按，仍按住的键继续单键计时。库不预登记具体组合。同时最多登记 4 组。
 
 ---
 
@@ -144,7 +144,7 @@ struct apl_hmi
 
 面板在编译期由 `APL_HMI_PANEL` 选定。换面板仍是这一个对象，使用方的实例不变。六颗键各自用 `APL_HMI_COMPILE_KEY_*` 决定是否编入，默认都编入。未编入的键不认手势，键灯保持灭，也不能参加组合键。
 
-上电（`apl_hmi_init`）后，已编入的键灯、氛围灯、四段水位灯和三位数字管以 `APL_HMI_LAMP_FULL`（255）全亮，数字为 `888`。氛围灯颜色不变。之后每拍由 `apl_hmi_tick` 维持。满 `APL_HMI_POWERUP_LAMP_TICKS`（200 拍，2 秒）后这些灯熄灭，数字清空，电源键留在 `APL_HMI_LAMP_HALF`（128）。未编入的键不点亮。净化或加湿未启用时，对应键灯在全亮阶段也被保持为 0。`apl_hmi_powerup_lamp_get` 在这 2 秒内返回 1，使用方这时不要覆盖这些灯。
+上电（`apl_hmi_init`）后，已编入的键灯、氛围灯、四段水位灯和三位数字管以 `APL_HMI_LAMP_FULL`（255）全亮，数字为 `888`。氛围灯颜色不变。之后每拍由 `apl_hmi_tick` 维持。满 `APL_HMI_POWERUP_LAMP_TICKS`（200 拍，2 秒）后这些灯熄灭，数字清空，电源键留在 `APL_HMI_LAMP_HALF`（128）。未编入的键不点亮。净化或加湿未启用时，对应键灯在全亮阶段也被保持为 0。`apl_hmi_get_powerup_lamp` 在这 2 秒内返回 1，使用方这时不要覆盖这些灯。
 
 当前这块圆形面板尚未在 `apl_hmi_config.h` 里登记，默认标识是 `APL_HMI_PANEL_UNSPECIFIED`。现在的实现就是这一对象，不另挂面板编号。人机本地默认值（例如各灯的初始亮度）确定后写入该头文件。
 

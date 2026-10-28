@@ -33,7 +33,7 @@ struct key_host
     int speed_short;
 };
 
-static void key_state_get(struct apl_hmi_key_state *state, void *ctx)
+static void get_key_state(struct apl_hmi_key_state *state, void *ctx)
 {
     struct key_host *host;
 
@@ -102,15 +102,15 @@ int main(void)
     host.speed_short = 0;
 
     memset(&ops, 0, sizeof(ops));
-    ops.key_state_get = key_state_get;
+    ops.get_key_state = get_key_state;
     apl_init(&machine, NULL, NULL, &ops, &host);
-    apl_hmi_key_callback_set(&machine.hmi, APL_HMI_KEY_LIGHT, on_light_short, on_light_long, &host);
-    apl_hmi_key_callback_set(&machine.hmi, APL_HMI_KEY_SPEED, on_speed_short, NULL, &host);
+    apl_hmi_set_key_callback(&machine.hmi, APL_HMI_KEY_LIGHT, on_light_short, on_light_long, &host);
+    apl_hmi_set_key_callback(&machine.hmi, APL_HMI_KEY_SPEED, on_speed_short, NULL, &host);
 
-    apl_hmi_key_lamp_set(&machine.hmi, APL_HMI_KEY_LIGHT, 5u);
-    EXPECT(0u == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_LIGHT));
-    apl_hmi_key_lamp_set(&machine.hmi, APL_HMI_KEY_SPEED, 3u);
-    EXPECT(3u == apl_hmi_key_lamp_get(&machine.hmi, APL_HMI_KEY_SPEED));
+    apl_hmi_set_key_lamp(&machine.hmi, APL_HMI_KEY_LIGHT, 5u);
+    EXPECT(0u == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_LIGHT));
+    apl_hmi_set_key_lamp(&machine.hmi, APL_HMI_KEY_SPEED, 3u);
+    EXPECT(3u == apl_hmi_get_key_lamp(&machine.hmi, APL_HMI_KEY_SPEED));
 
     host.level.light = APL_HMI_KEY_PRESSED;
     ticks(&machine.hmi, APL_HMI_LONG_PRESS_TICKS);
@@ -128,7 +128,7 @@ int main(void)
 
     pair[0] = APL_HMI_KEY_LIGHT;
     pair[1] = APL_HMI_KEY_POWER;
-    EXPECT(-1 == apl_hmi_combo_set(&machine.hmi, pair, 2u, 100u, on_combo, &host));
+    EXPECT(-1 == apl_hmi_set_combo(&machine.hmi, pair, 2u, 100u, on_combo, &host));
 
     if (0 != g_failed)
     {

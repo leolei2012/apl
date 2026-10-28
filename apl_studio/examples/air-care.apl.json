@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "name": "空气净化加湿一体机",
+  "code": "air_care",
+  "description": "从产品功能开始，定义净化、加湿与环境数据。生成统一的产品定义，供后续 APL 源码模板使用。",
+  "category": "环境电器",
+  "sdkVersion": "0.1.0",
+  "functions": [
+    {
+      "id": "field_1",
+      "key": "power",
+      "name": "电源",
+      "description": "整机电源开关",
+      "kind": "bool",
+      "access": "readwrite",
+      "default": false,
+      "unit": "",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "maxLength": 64,
+      "options": []
+    },
+    {
+      "id": "field_2",
+      "key": "fan_speed",
+      "name": "风机档位",
+      "description": "",
+      "kind": "enum",
+      "access": "readwrite",
+      "default": 1,
+      "unit": "",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "maxLength": 64,
+      "options": [
+        {
+          "label": "睡眠",
+          "value": 0
+        },
+        {
+          "label": "一档",
+          "value": 1
+        },
+        {
+          "label": "二档",
+          "value": 2
+        },
+        {
+          "label": "三档",
+          "value": 3
+        },
+        {
+          "label": "自动",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "id": "field_3",
+      "key": "humidify",
+      "name": "加湿",
+      "description": "加湿功能开关",
+      "kind": "bool",
+      "access": "readwrite",
+      "default": true,
+      "unit": "",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "maxLength": 64,
+      "options": []
+    },
+    {
+      "id": "field_4",
+      "key": "humidity",
+      "name": "环境湿度",
+      "description": "",
+      "kind": "int",
+      "access": "read",
+      "default": 55,
+      "unit": "%",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "maxLength": 64,
+      "options": []
+    },
+    {
+      "id": "field_5",
+      "key": "pm25",
+      "name": "PM2.5",
+      "description": "",
+      "kind": "int",
+      "access": "read",
+      "default": 28,
+      "unit": "μg/m³",
+      "min": 0,
+      "max": 1000,
+      "step": 1,
+      "maxLength": 64,
+      "options": []
+    }
+  ],
+  "parameters": [
+    {
+      "id": "field_6",
+      "key": "tick_ms",
+      "name": "业务推进周期（ms）",
+      "value": 10
+    },
+    {
+      "id": "field_7",
+      "key": "filter_life_h",
+      "name": "滤芯寿命（小时）",
+      "value": 4320
+    }
+  ],
+  "template": null
+}

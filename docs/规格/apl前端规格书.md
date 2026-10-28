@@ -61,7 +61,7 @@ core → link_snapshot → hmi → 屏 / 灯
 3. 快照标明某项功能未启用时，人机不绘制该项的图标、数值和操作入口。
 4. 同一套界面逻辑覆盖全部动态配置。画不画净化、加湿，只看快照。
 
-按键电平由宿主在 `apl_hmi_init` 注入的 `key_state_get` 一次给出六颗键。`apl_hmi_init` 让已编入的灯和三位数字管全亮，数字为 888；200 拍后熄灭，电源键半亮。使用方每 10 ms 调用 `apl_tick`，其中再调用 `apl_hmi_tick`。全亮阶段 `apl_hmi_powerup_lamp_get` 返回 1，使用方不要覆盖这些灯。短按在松开时发出，按下满 3 秒发出长按，同一次按下不重复。宿主和人机交换显示、童锁、启用标志和键回调时走 getter 和 setter。童锁、组合键和对象属性见 [HMI Datasheet](./datasheet.md)。
+按键电平由宿主在 `apl_hmi_init` 注入的 `get_key_state` 一次给出六颗键。`apl_hmi_init` 让已编入的灯和三位数字管全亮，数字为 888；200 拍后熄灭，电源键半亮。使用方每 10 ms 调用 `apl_tick`，其中再调用 `apl_hmi_tick`。全亮阶段 `apl_hmi_get_powerup_lamp` 返回 1，使用方不要覆盖这些灯。短按在松开时发出，按下满 3 秒发出长按，同一次按下不重复。宿主和人机交换显示、童锁、启用标志和键回调时走 getter 和 setter。童锁、组合键和对象属性见 [HMI Datasheet](./datasheet.md)。
 
 命令和快照的类型在 `include/apl_type.h`，字段见后端规格书第 3.2 节。本库内两边同在一个 `struct apl`，直接传结构体；跨芯片的字节协议和断连表现待定。
 
@@ -99,7 +99,7 @@ core → link_snapshot → hmi → 屏 / 灯
 
 | 键 | 短按 | 长按 3 秒 |
 |---|---|---|
-| 电源 | 产测中：`FACTORY_EXIT`；否则 `POWER` | `DRY_STOP` |
+| 电源 | 产测中：`FACTORY_EXIT`；否则 `POWER`（待机/风干中开机，运行中关机） | `DRY_STOP` |
 | 风速 | `FAN_CYCLE` | `TURBO_TOGGLE` |
 | 净化 | `PURIFY_TOGGLE` | `WIFI_PAIR` |
 | 定时 | 本地定时设置（见下） | 童锁开关（本地） |

@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "engine": "native-c-v1",
+  "id": "standard.lighting",
+  "version": "1.0.0",
+  "name": "可调光灯控",
+  "description": "独立 C11 灯控示例：电源、亮度和开灯延迟，用于验证多品类 SDK 流程。",
+  "definitionSchemaVersion": 1,
+  "sourceVersion": "1.0.0",
+  "productDefaults": {
+    "code": "dimmable_light",
+    "category": "照明"
+  },
+  "features": [
+    {
+      "key": "power",
+      "name": "电源",
+      "description": "开灯遵循配置的启动延迟。",
+      "required": true,
+      "enabledByDefault": true,
+      "defaultBinding": {
+        "path": "settings/product_config.h",
+        "macro": "LIGHT_DEFAULT_POWER"
+      },
+      "definition": {
+        "id": "template_power",
+        "key": "power",
+        "name": "电源",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      }
+    },
+    {
+      "key": "brightness",
+      "name": "亮度",
+      "description": "设置 0–100% 请求亮度，输出由硬件回调实现。",
+      "required": true,
+      "enabledByDefault": true,
+      "defaultBinding": {
+        "path": "settings/product_config.h",
+        "macro": "LIGHT_DEFAULT_BRIGHTNESS"
+      },
+      "definition": {
+        "id": "template_brightness",
+        "key": "brightness",
+        "name": "亮度",
+        "description": "",
+        "kind": "int",
+        "access": "readwrite",
+        "default": 40,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "key": "boot_delay_ms",
+      "name": "开灯延迟",
+      "description": "请求开灯后等待多久才输出 PWM；10 ms 步进。",
+      "kind": "int",
+      "default": 50,
+      "min": 0,
+      "max": 5000,
+      "step": 10,
+      "unit": "ms",
+      "binding": {
+        "path": "settings/product_config.h",
+        "macro": "LIGHT_BOOT_DELAY_MS"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "key": "set_light",
+      "name": "灯光输出",
+      "signature": "void set_light(bool on, uint8_t brightness, void *ctx)",
+      "description": "将 0–100% 亮度映射到 PWM，将 on 映射到输出使能。",
+      "required": true
+    }
+  ],
+  "constraints": [],
+  "directories": [
+    "api",
+    "settings",
+    "lib",
+    "board",
+    "samples",
+    "checks"
+  ],
+  "staticFiles": [
+    "CMakeLists.txt",
+    "README.md"
+  ],
+  "previewFiles": [
+    "api/product.h",
+    "settings/product_config.h",
+    "board/light_port.c",
+    "README.md"
+  ],
+  "verification": {
+    "sourceDirectories": [
+      "lib",
+      "board",
+      "samples"
+    ],
+    "includeDirectories": [
+      "api",
+      "settings",
+      "board"
+    ],
+    "consumer": "checks/verify.c",
+    "scope": "灯控默认值、开灯延迟、亮度范围、实际输出回调与实例隔离"
+  }
+}

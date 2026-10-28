@@ -53,7 +53,7 @@ void apl_tick(struct apl *self)
     }
 
     apl_core_tick(&self->core);
-    apl_core_snapshot_get(&self->core, &snapshot);
-    apl_hmi_snapshot_set(&self->hmi, &snapshot);
+    apl_core_get_snapshot(&self->core, &snapshot);
+    apl_hmi_set_snapshot(&self->hmi, &snapshot);
     apl_hmi_tick(&self->hmi);
 }
