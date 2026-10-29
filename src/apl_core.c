@@ -78,6 +78,7 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint8_t purify_on;
     uint8_t humidify_on;
     uint8_t humidity;
+    uint8_t humidity_sampled;
     uint8_t humidity_target;
     uint8_t humidity_hold;
     uint8_t shortage;
@@ -312,6 +313,7 @@ static void apl_core_sensor_sample(struct apl_core_state *state)
     if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops->get_humidity))
     {
         state->humidity = state->ops->get_humidity(state->ctx);
+        state->humidity_sampled = 1u;
     }
 }
 
@@ -357,6 +359,24 @@ static uint8_t apl_core_constant_humidity(const struct apl_core_state *state)
             && (APL_HUMIDITY_TARGET_OFF != state->humidity_target)) ? 1u : 0u;
 }
 
+/** 加湿器交互逻辑 C9:E9。已读取不等于传感器有效，后者仍由宿主保证。 */
+static enum apl_fan_gear apl_core_humidify_auto_gear(const struct apl_core_state *state)
+{
+    /* 没有样本、回调或整数百分比时保留旧输出，不在此定义故障策略。 */
+    if ((0u == state->humidity_sampled) || (NULL == state->ops)
+        || (NULL == state->ops->get_humidity) || (state->humidity > 100u))
+    {
+        return APL_FAN_GEAR_2;
+    }
+
+    if (state->humidity <= 30u)
+    {
+        return APL_FAN_GEAR_3;
+    }
+
+    return (state->humidity <= 50u) ? APL_FAN_GEAR_2 : APL_FAN_GEAR_1;
+}
+
 static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state *state)
 {
     enum apl_fan_gear gear;
@@ -391,7 +411,7 @@ static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state
             return apl_core_aq_gear(state);
         }
 
-        return APL_FAN_GEAR_2;
+        return apl_core_humidify_auto_gear(state);
     }
 
     return state->fan_gear;
@@ -837,6 +857,7 @@ void apl_core_power_on(struct apl_core *self)
 
     state->power = APL_POWER_ON;
     state->run_state = APL_RUN_ON;
+    state->humidity_sampled = 0u;
     state->dry_left_s = 0u;
     state->factory_done = 0u;
     state->cl_left_s = 0u;

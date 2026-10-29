@@ -1121,6 +1121,120 @@ static void test_purify_auto_bands(void)
     EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_AUTO));
 }
 
+/** 加湿器交互逻辑 C9:E9。样本由宿主提供；未实现传感器故障判定。 */
+static void test_humidify_auto_bands(void)
+{
+    static const enum apl_fan_gear manual[] = {
+        APL_FAN_GEAR_SLEEP, APL_FAN_GEAR_1, APL_FAN_GEAR_2,
+        APL_FAN_GEAR_3, APL_FAN_GEAR_TURBO
+    };
+    struct apl machine;
+    struct host host;
+    struct apl_link_snapshot snap;
+    enum apl_fan_gear expected;
+    unsigned pass;
+    unsigned index;
+    unsigned selected;
+    uint8_t rh;
+    uint8_t beep_seq;
+
+    if (!HAS_HUMIDIFY || HAS_PURIFY)
+    {
+        return;
+    }
+
+    machine_start(&machine, &host);
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_POWER, 0u));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
+    EXPECT(APL_HUMIDITY_TARGET_OFF == snap_of(&machine.core).humidity_target);
+    /* 默认零值不是已读取的 RH0 样本；第一秒采样前保留原输出。 */
+    apl_tick(&machine);
+    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+    beep_seq = snap_of(&machine.core).beep_seq;
+    for (pass = 0u; pass < 2u; pass++)
+    {
+        for (index = 0u; index <= 100u; index++)
+        {
+            rh = (uint8_t)((0u == pass) ? index : 100u - index);
+            expected = (rh <= 30u) ? APL_FAN_GEAR_3
+                       : ((rh <= 50u) ? APL_FAN_GEAR_2 : APL_FAN_GEAR_1);
+            host.humidity = rh;
+            machine_ticks(&machine, TICKS_PER_S + 1u);
+            snap = snap_of(&machine.core);
+            EXPECT(rh == snap.humidity);
+            EXPECT(expected == host.fan_gear);
+            EXPECT(expected == snap.fan_output);
+            EXPECT(APL_SWITCH_ON == host.fan);
+            EXPECT(APL_SWITCH_ON == host.pump);
+            EXPECT(APL_FAN_GEAR_AUTO == snap.fan_gear);
+            EXPECT(APL_HUMIDITY_TARGET_OFF == snap.humidity_target);
+            EXPECT(0u == snap.sleep);
+            EXPECT(beep_seq == snap.beep_seq);
+            EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_AUTO));
+            EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
+        }
+    }
+    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_digits_brightness(&machine.hmi));
+
+    /* 手动、睡眠和极速不跟随湿度；高湿停泵规则不扩展到纯加湿。 */
+    for (selected = 0u; selected < sizeof(manual) / sizeof(manual[0]); selected++)
+    {
+        EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, (uint8_t)manual[selected]));
+        for (index = 0u; index < 2u; index++)
+        {
+            host.humidity = (0u == index) ? 0u : 100u;
+            machine_ticks(&machine, TICKS_PER_S + 1u);
+            snap = snap_of(&machine.core);
+            EXPECT(manual[selected] == host.fan_gear);
+            EXPECT(manual[selected] == snap.fan_output);
+            EXPECT((APL_FAN_GEAR_SLEEP == manual[selected]) == (0u != snap.sleep));
+            EXPECT(((APL_FAN_GEAR_TURBO == manual[selected]) ? APL_SWITCH_OFF : APL_SWITCH_ON)
+                   == host.pump);
+        }
+    }
+
+    /* 恒湿仍先于 Auto：目标60、RH40差20，应三档而非绝对RH对应的二档。 */
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_HUMIDITY_TARGET, 60u));
+    host.humidity = 40u;
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_3 == host.fan_gear);
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_HUMIDITY_TARGET, APL_HUMIDITY_TARGET_OFF));
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+
+    /* 缺失回调、越界值不纳入三段表；只要求保留旧二档，不定义故障回退。 */
+    host.humidity = UINT8_MAX;
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+    host.humidity = 60u;
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
+    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    EXPECT(1u == snap_of(&machine.core).sleep);
+    EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
+    apl_tick(&machine);
+    EXPECT(APL_FAN_GEAR_AUTO == snap_of(&machine.core).fan_gear);
+    EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
+    EXPECT(0u == snap_of(&machine.core).sleep);
+    /* 新运行周期不沿用上次已读取标记，直到宿主再次提供样本。 */
+    apl_core_power_off(&machine.core);
+    apl_core_power_on(&machine.core);
+    apl_tick(&machine);
+    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
+    machine_start(&machine, &host);
+    g_core_ops.get_humidity = NULL;
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_POWER, 0u));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+}
+
 int main(void)
 {
     test_reject();
@@ -1136,6 +1250,7 @@ int main(void)
     test_panel_factory();
     test_hmi_resources();
     test_purify_auto_bands();
+    test_humidify_auto_bands();
 
     if (0 != g_failed)
     {
