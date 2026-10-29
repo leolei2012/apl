@@ -91,9 +91,9 @@
 #define APL_CORE_FILTER_SHARED          1u
 #endif
 
-/** 缺水后继续运行的时间，秒。到时进入风干 */
+/** 纯加湿缺水恢复窗口，秒。默认5分钟后风干；一体机始终保持净化。 */
 #ifndef APL_CORE_WATER_SHORTAGE_RUN_S
-#define APL_CORE_WATER_SHORTAGE_RUN_S   1800u
+#define APL_CORE_WATER_SHORTAGE_RUN_S   300u
 #endif
 
 /** 缺水橙灯闪烁时间，秒。之后常亮 */

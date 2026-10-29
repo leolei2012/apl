@@ -299,6 +299,7 @@ static void test_power_and_dry(void)
 
         /* 风干中长按电源键立即结束。 */
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
+        apl_core_tick(&core);
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_POWER, 0u));
         EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_DRY_STOP, 0u));
         EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
@@ -484,14 +485,14 @@ static void test_water(void)
         return;
     }
 
-    EXPECT(APL_WATER_ALERT_BLINK == snap.water_alert);
+    EXPECT((HAS_PURIFY ? APL_WATER_ALERT_STEADY : APL_WATER_ALERT_BLINK) == snap.water_alert);
     EXPECT(APL_BEEP_WATER_SHORTAGE == snap.beep);
     EXPECT((uint8_t)(seq + 1u) == snap.beep_seq);
     EXPECT(APL_SWITCH_OFF == host.pump);
     EXPECT(APL_SWITCH_ON == host.fan);
 
-    core_seconds(&core, APL_CORE_WATER_BLINK_S);
-    EXPECT(APL_WATER_ALERT_STEADY == snap_of(&core).water_alert);
+    core_seconds(&core, APL_CORE_WATER_SHORTAGE_RUN_S - 1u);
+    EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
 
     /* 加水恢复。 */
     host.water = APL_WATER_LEVEL_2;
@@ -504,13 +505,13 @@ static void test_water(void)
     apl_core_tick(&core);
     EXPECT(APL_BEEP_WATER_FULL == snap_of(&core).beep);
 
-    /* 缺水 30 分钟未加水进入风干。 */
+    /* 纯加湿到恢复窗口后风干；一体机继续净化。 */
     host.water = APL_WATER_LEVEL_0;
     apl_core_tick(&core);
     core_seconds(&core, APL_CORE_WATER_SHORTAGE_RUN_S - 1u);
     EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
     core_seconds(&core, 1u);
-    EXPECT(APL_RUN_DRY == apl_core_get_run_state(&core));
+    EXPECT((HAS_PURIFY ? APL_RUN_ON : APL_RUN_DRY) == apl_core_get_run_state(&core));
 
     /* 睡眠中缺水不响。 */
     core_start(&core, &host);
@@ -521,14 +522,14 @@ static void test_water(void)
     apl_core_tick(&core);
     snap = snap_of(&core);
     EXPECT(seq == snap.beep_seq);
-    EXPECT(APL_WATER_ALERT_BLINK == snap.water_alert);
+    EXPECT((HAS_PURIFY ? APL_WATER_ALERT_STEADY : APL_WATER_ALERT_BLINK) == snap.water_alert);
 
     /* 开机时已缺水，直接按缺水处理。 */
     core_start(&core, &host);
     host.water = APL_WATER_LEVEL_0;
     apl_core_tick(&core);
     (void)cmd(&core, APL_LINK_CMD_POWER, 0u);
-    EXPECT(APL_WATER_ALERT_BLINK == snap_of(&core).water_alert);
+    EXPECT((HAS_PURIFY ? APL_WATER_ALERT_STEADY : APL_WATER_ALERT_BLINK) == snap_of(&core).water_alert);
 }
 
 static void test_filter(void)

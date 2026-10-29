@@ -18,7 +18,7 @@
 #endif
 
 APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000102u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000103u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
@@ -82,6 +82,7 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint8_t humidity_target;
     uint8_t humidity_hold;
     uint8_t shortage;
+    uint8_t dry_needed; /**< 本次运行已提交过泵开启请求；不持久化。 */
     uint8_t uv_fault;
     uint8_t used;
     uint8_t factory_pending;
@@ -405,6 +406,10 @@ static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state
 
     if (APL_RUN_DRY == state->run_state)
     {
+        if ((0u == apl_core_has_purify(state)) && (APL_FAN_GEAR_SLEEP == state->fan_gear))
+        {
+            return APL_FAN_GEAR_SLEEP;
+        }
         return (enum apl_fan_gear)APL_CORE_DRY_FAN_GEAR;
     }
 
@@ -492,6 +497,12 @@ static void apl_core_outputs_apply(struct apl_core *self,
     if (targets->pump != state->pump)
     {
         state->pump = targets->pump;
+        if (APL_SWITCH_ON == targets->pump)
+        {
+            /* E17/E21：依据提交的负载状态，不以功能启用或模式代替运行历史。
+             * 硬件是否成功执行仍由port负责；本接口没有执行确认反馈。 */
+            state->dry_needed = 1u;
+        }
         if ((NULL != ops) && (NULL != ops->set_pump))
         {
             ops->set_pump(targets->pump, state->ctx);
@@ -575,7 +586,8 @@ static void apl_core_shortage_start(struct apl_core_state *state) APL_CALL
 
     state->shortage = 1u;
     state->shortage_s = 0u;
-    state->water_alert = APL_WATER_ALERT_BLINK;
+    state->water_alert = (0u != apl_core_has_purify(state)) ? APL_WATER_ALERT_STEADY
+                                                         : APL_WATER_ALERT_BLINK;
     apl_core_beep_unless_sleep(state, APL_BEEP_WATER_SHORTAGE);
 }
 
@@ -717,6 +729,7 @@ static void apl_core_factory_restore(struct apl_core *self) APL_CALL
     }
 
     state->run_state = APL_RUN_STANDBY;
+    state->dry_needed = 0u;
     state->power = APL_POWER_OFF;
     state->fan_gear = (enum apl_fan_gear)APL_DEFAULT_FAN_GEAR;
     state->gear_before_turbo = state->fan_gear;
@@ -791,13 +804,19 @@ static void apl_core_second(struct apl_core *self) APL_CALL
 
     if ((APL_RUN_ON == state->run_state) && (0u != state->shortage))
     {
-        state->shortage_s++;
+        if (state->shortage_s < UINT32_MAX)
+        {
+            state->shortage_s++;
+        }
         if (state->shortage_s >= APL_CORE_WATER_BLINK_S)
         {
             state->water_alert = APL_WATER_ALERT_STEADY;
         }
 
-        if (state->shortage_s >= APL_CORE_WATER_SHORTAGE_RUN_S)
+        /* 一体机D20/E20：缺水只停加湿，净化持续运行。
+         * 纯加湿E16：5分钟恢复窗口结束后进入风干。 */
+        if ((0u == apl_core_has_purify(state))
+            && (state->shortage_s >= APL_CORE_WATER_SHORTAGE_RUN_S))
         {
             apl_core_dry_start(self);
             state->water_alert = APL_WATER_ALERT_STEADY;
@@ -840,6 +859,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
     state->ctx = ctx;
     state->power = APL_POWER_OFF;
     state->run_state = APL_RUN_STANDBY;
+    state->dry_needed = 0u;
     state->fan_gear = (enum apl_fan_gear)APL_DEFAULT_FAN_GEAR;
     state->gear_before_turbo = state->fan_gear;
     state->gear_before_sleep = state->fan_gear;
@@ -928,6 +948,7 @@ void apl_core_power_off(struct apl_core *self) APL_CALL
 
     state->power = APL_POWER_OFF;
     state->run_state = APL_RUN_STANDBY;
+    state->dry_needed = 0u;
     state->dry_left_s = 0u;
     state->humidity_target = APL_HUMIDITY_TARGET_OFF;
     if (APL_FAN_GEAR_TURBO == state->fan_gear)
@@ -1055,7 +1076,7 @@ static enum apl_link_result apl_core_cmd_power(struct apl_core *self) APL_CALL
         apl_core_power_on(self);
         return APL_LINK_OK;
     case APL_RUN_ON:
-        if (0u != apl_core_has_humidify(state))
+        if ((0u != apl_core_has_humidify(state)) && (0u != state->dry_needed))
         {
             apl_core_dry_start(self);
         }

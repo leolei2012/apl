@@ -17,7 +17,7 @@ compiler = os.environ.get('CC') or shutil.which('gcc') or (str(mingw[-1]) if min
 if not compiler:
     raise SystemExit('Existing GCC required; no dependencies installed')
 sources = [ROOT / 'apl_lib/src' / name for name in ['apl.c', 'apl_core.c', 'apl_hmi.c']]
-tests = ['test_apl.c', 'test_link.c', 'test_hmi_key_optional.c', 'test_sdk_release.c', 'test_apl_platform.c', 'test_workbook_keys.c', 'test_filter_ratio.c']
+tests = ['test_apl.c', 'test_link.c', 'test_hmi_key_optional.c', 'test_sdk_release.c', 'test_apl_platform.c', 'test_workbook_keys.c', 'test_workbook_water.c', 'test_filter_ratio.c']
 paths = [*sources, *sorted((ROOT / 'apl_lib/include').glob('*.h')),
          *sorted((ROOT / 'apl_lib/config').glob('*.h')), *[ROOT / 'tests' / n for n in tests]]
 def hashes():
@@ -41,7 +41,9 @@ with tempfile.TemporaryDirectory(prefix='apl-platform-') as directory:
                 extra += ['-DAPL_HMI_COMPILE_KEY_LIGHT=0']
             exe = Path(directory) / (label + '-' + name + ('.exe' if os.name == 'nt' else ''))
             subprocess.run([compiler, *flags, *extra, str(ROOT / 'tests' / test), *map(str, sources), '-o', str(exe)], check=True, timeout=60)
-            run = subprocess.run([str(exe)], check=True, capture_output=True, text=True, timeout=30)
+            run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
+            if run.returncode:
+                raise RuntimeError(label + '/' + name + ': ' + run.stdout + run.stderr)
             results.append({'capabilities': label, 'case': name, 'status': 'passed', 'stdout': run.stdout})
             print('PASS:', label, name)
 if hashes() != before:

@@ -8,7 +8,7 @@
 APL_STATIC_ASSERT(sizeof(uint8_t) == 1u, "uint8");
 APL_STATIC_ASSERT(sizeof(uint16_t) == 2u, "uint16");
 APL_STATIC_ASSERT(sizeof(uint32_t) == 4u, "uint32");
-APL_STATIC_ASSERT(APL_VERSION_NUM == 0x000102u, "development patch version");
+APL_STATIC_ASSERT(APL_VERSION_NUM == 0x000103u, "development patch version");
 
 static void key_sample(struct apl_hmi_key_state *state, void *ctx) APL_CALL
 {
