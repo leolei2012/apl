@@ -108,7 +108,7 @@ test('产品经理闭环：服务端真实C验收、极速开关、过期门禁�
     assert.match(strFromU8(files['apl-sdk/docs/product-spec.md']), /无档位切换动作/)
     const restored = new AcceptanceService(join(f.directory, 'acceptance'), f.registry, f.simulations)
     assert.equal(restored.require(p).fingerprint, second.report!.fingerprint)
-    const adapter = simulationAdapters[0], original = adapter.source
+    const adapter = simulationAdapters.find(candidate => candidate.supports(template))!, original = adapter.source
     try {
       adapter.source = definition => '/* changed bridge */\n' + original(definition)
       assert.equal(restored.latest(p).current, false)
