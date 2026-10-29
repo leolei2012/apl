@@ -101,6 +101,14 @@ enum apl_beep
     APL_BEEP_UV_ALARM        /**< UV 联锁断开报警 */
 };
 
+/** 可选模块，故障值由宿主校验和消抖后提供；不规定板间协议。 */
+enum apl_module
+{
+    APL_MODULE_UV = 0,
+    APL_MODULE_ANION,
+    APL_MODULE_WIFI
+};
+
 /** 人机发给主控的操作种类。 */
 enum apl_link_command_type
 {
@@ -118,7 +126,9 @@ enum apl_link_command_type
     APL_LINK_CMD_FILTER_RESET,     /**< 滤网重置 */
     APL_LINK_CMD_WIFI_PAIR,        /**< 净化键长按：清除网络并配网 */
     APL_LINK_CMD_FACTORY_ENTER,    /**< 产测组合键 */
-    APL_LINK_CMD_FACTORY_EXIT      /**< 产测中按电源键：恢复出厂设置 */
+    APL_LINK_CMD_FACTORY_EXIT,     /**< 产测中按电源键：恢复出厂设置 */
+    APL_LINK_CMD_UV_SET,           /**< 独立UV请求，arg为0/1，仍受联锁和故障限制。 */
+    APL_LINK_CMD_ANION_SET         /**< 独立负离子请求，arg为0/1，不改变主风机档。 */
 };
 
 /** apl_core_command 的结果。 */
@@ -175,6 +185,12 @@ struct apl_link_snapshot
     uint8_t filter_reset_forced;       /**< 最近一次重置是否未到期强制重置 */
     uint8_t uv_fault;                  /**< UV 联锁断开过，直到再次开启净化 */
     uint8_t factory_done;              /**< 刚完成恢复出厂设置，显示 CL */
+    uint8_t uv_enabled;
+    uint8_t anion_enabled;
+    uint8_t wifi_enabled;
+    uint8_t uv_requested;
+    uint8_t anion_requested;
+    uint8_t module_faults;             /**< bit0 UV，bit1负离子，bit2 Wi-Fi；由宿主故障输入提供。 */
 };
 
 /**
@@ -191,6 +207,9 @@ struct apl_core_memory
     uint8_t purify_on;
     uint8_t humidify_on;
     uint8_t factory_pending;      /**< 产测未完成，上电先恢复出厂设置 */
+    uint8_t module_state_valid;   /**< 1表示以下独立请求字段有效；旧字段导入应置0，禁止裸结构跨版本恢复。 */
+    uint8_t uv_requested;
+    uint8_t anion_requested;
 };
 
 #endif /* APL_TYPE_H */

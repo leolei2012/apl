@@ -17,9 +17,9 @@
 #include "apl_type.h"
 
 #define APL_CORE_VERSION_MAJOR  0
-#define APL_CORE_VERSION_MINOR  1
-#define APL_CORE_VERSION_PATCH  4
-#define APL_CORE_VERSION_STRING "0.1.4"
+#define APL_CORE_VERSION_MINOR  2
+#define APL_CORE_VERSION_PATCH  0
+#define APL_CORE_VERSION_STRING "0.2.0"
 #define APL_CORE_VERSION_NUM \
     ((APL_CORE_VERSION_MAJOR << 16) | (APL_CORE_VERSION_MINOR << 8) | APL_CORE_VERSION_PATCH)
 
@@ -53,10 +53,12 @@ struct apl_core_ops
     uint16_t (*get_pm10)(void *ctx) APL_CALL;        /**< μg/m³。选配，空则不参与空气质量判定 */
     uint16_t (*get_hcho)(void *ctx) APL_CALL;        /**< 甲醛，μg/m³（mg/m³ × 1000）。选配 */
     uint16_t (*get_tvoc)(void *ctx) APL_CALL;        /**< TVOC，μg/m³（mg/m³ × 1000）。选配 */
-    uint8_t (*get_uv_interlock)(void *ctx) APL_CALL; /**< UV 安全微动开关，1 闭合。空则视为闭合 */
+    uint8_t (*get_uv_interlock)(void *ctx) APL_CALL; /**< UV 安全微动开关，仅1闭合；缺失输入按断开处理 */
     void (*set_fan)(enum apl_switch state, enum apl_fan_gear gear, void *ctx) APL_CALL;
     void (*set_pump)(enum apl_switch state, void *ctx) APL_CALL;  /**< 水泵与雾化等加湿负载 */
     void (*memory_save)(const struct apl_core_memory *memory, void *ctx) APL_CALL;
+    uint8_t (*get_module_fault)(enum apl_module module, void *ctx) APL_CALL;
+    /**< 宿主已判定故障：0正常，非0故障。NULL表示无该故障反馈，不能据此宣称已检测。 */
 };
 
 /** 占位对象。使用方声明它来持有实例，不读写 storage。 */

@@ -18,7 +18,7 @@
 #endif
 
 APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000104u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000200u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
@@ -77,6 +77,9 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint8_t purify_enabled;
     uint8_t humidify_enabled;
     uint8_t purify_on;
+    uint8_t uv_requested;
+    uint8_t anion_requested;
+    uint8_t module_faults;
     uint8_t humidify_on;
     uint8_t humidity;
     uint8_t humidity_sampled;
@@ -206,6 +209,9 @@ static void apl_core_memory_fill(const struct apl_core_state *state,
     memory->purify_on = state->purify_on;
     memory->humidify_on = state->humidify_on;
     memory->factory_pending = state->factory_pending;
+    memory->module_state_valid = 1u;
+    memory->uv_requested = state->uv_requested;
+    memory->anion_requested = state->anion_requested;
 }
 
 static void apl_core_memory_notify(struct apl_core *self) APL_CALL
@@ -259,6 +265,7 @@ static uint8_t apl_core_filter_left(uint32_t used_s) APL_CALL
     return quotient;
 }
 
+#if (APL_COMPILE_SENSOR_PM25 || APL_COMPILE_SENSOR_PM10 || APL_COMPILE_SENSOR_HCHO || APL_COMPILE_SENSOR_TVOC)
 static enum apl_aq_level apl_core_aq_grade(uint16_t value,
                                            uint16_t excellent,
                                            uint16_t good,
@@ -287,6 +294,8 @@ static enum apl_aq_level apl_core_aq_worse(enum apl_aq_level a, enum apl_aq_leve
     return (b > a) ? b : a;
 }
 
+#endif
+
 /**
  * 原表多传感器分级。区间端点归较好的一档（待确认：TVOC 0.3、0.5 两档重叠）。
  * 甲醛没有「良」，0.050 以上直接是中度污染。
@@ -303,41 +312,51 @@ static void apl_core_sensor_sample(struct apl_core_state *state) APL_CALL
     if (0u != apl_core_has_purify(state))
     {
         level = APL_AQ_EXCELLENT;
+#if APL_COMPILE_SENSOR_PM25
         if (NULL != state->ops->get_pm25)
         {
             state->pm25 = state->ops->get_pm25(state->ctx);
             level = apl_core_aq_worse(level, apl_core_aq_grade(state->pm25, 35u, 75u, 150u));
         }
+#endif
 
+#if APL_COMPILE_SENSOR_PM10
         if (NULL != state->ops->get_pm10)
         {
             level = apl_core_aq_worse(level,
                                       apl_core_aq_grade(state->ops->get_pm10(state->ctx),
                                                         40u, 70u, 150u));
         }
+#endif
 
+#if APL_COMPILE_SENSOR_HCHO
         if (NULL != state->ops->get_hcho)
         {
             level = apl_core_aq_worse(level,
                                       apl_core_aq_grade(state->ops->get_hcho(state->ctx),
                                                         50u, 50u, 80u));
         }
+#endif
 
+#if APL_COMPILE_SENSOR_TVOC
         if (NULL != state->ops->get_tvoc)
         {
             level = apl_core_aq_worse(level,
                                       apl_core_aq_grade(state->ops->get_tvoc(state->ctx),
                                                         300u, 500u, 1000u));
         }
+#endif
 
         state->aq_level = level;
     }
 
+#if APL_COMPILE_SENSOR_HUMIDITY
     if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops->get_humidity))
     {
         state->humidity = state->ops->get_humidity(state->ctx);
         state->humidity_sampled = 1u;
     }
+#endif
 }
 
 /** 恒湿风速表。差值 = 设定 − 实际；达到或超过设定仍是一档。 */
@@ -464,6 +483,31 @@ static void apl_core_humidity_hold_update(struct apl_core_state *state) APL_CALL
     }
 }
 
+#if (APL_COMPILE_UV || APL_COMPILE_ANION || APL_COMPILE_WIFI)
+static uint8_t apl_core_module_fault(struct apl_core_state *state,
+                                      enum apl_module module) APL_CALL
+{
+    uint8_t fault;
+    uint8_t mask;
+
+    fault = 0u;
+    mask = (uint8_t)(1u << (unsigned)module);
+    if ((NULL != state->ops) && (NULL != state->ops->get_module_fault))
+    {
+        fault = (0u != state->ops->get_module_fault(module, state->ctx)) ? 1u : 0u;
+    }
+    if (0u != fault)
+    {
+        state->module_faults |= mask;
+    }
+    else
+    {
+        state->module_faults &= (uint8_t)~mask;
+    }
+    return fault;
+}
+#endif
+
 /** 仲裁后的执行器目标。仅在本拍栈上存在，不改变对象或公开接口布局。 */
 struct apl_core_output_targets
 {
@@ -538,6 +582,8 @@ static void apl_core_outputs_update(struct apl_core *self) APL_CALL
     struct apl_core_output_targets targets;
     uint8_t running;
     uint8_t interlock;
+    uint8_t uv_fault;
+    uint8_t anion_fault;
     const struct apl_core_ops *ops;
 
     state = apl_core_state_of(self);
@@ -559,22 +605,49 @@ static void apl_core_outputs_update(struct apl_core *self) APL_CALL
                     && (0u == state->shortage)
                     && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
 
-    interlock = 1u;
+    interlock = 0u;
+    uv_fault = 0u;
+    anion_fault = 0u;
+#if APL_COMPILE_UV
     if ((NULL != ops) && (NULL != ops->get_uv_interlock))
     {
-        interlock = ops->get_uv_interlock(state->ctx);
+        interlock = (1u == ops->get_uv_interlock(state->ctx)) ? 1u : 0u;
     }
+    uv_fault = apl_core_module_fault(state, APL_MODULE_UV);
+#endif
+#if APL_COMPILE_ANION
+    anion_fault = apl_core_module_fault(state, APL_MODULE_ANION);
+#endif
+#if APL_COMPILE_WIFI
+    if (0u != apl_core_module_fault(state, APL_MODULE_WIFI))
+    {
+        state->wifi = APL_WIFI_OFF;
+        state->wifi_left_s = 0u;
+    }
+#endif
 
-    if ((APL_SWITCH_ON == state->uv) && (0u == interlock))
+    if (((APL_SWITCH_ON == state->uv) && (0u == interlock))
+        || ((0u != running) && (0u != uv_fault) && (0u != state->uv_requested) && (0u == state->uv_fault)))
     {
         state->uv_fault = 1u;
         apl_core_beep(state, APL_BEEP_UV_ALARM);
     }
 
-    targets.anion = ((0u != running) && (0u != apl_core_has_purify(state))
-                     && (0u != state->purify_on)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
-    targets.uv = ((APL_SWITCH_ON == targets.anion) && (0u != interlock)
-                  && (0u == state->uv_fault)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
+#if APL_COMPILE_ANION
+    targets.anion = ((0u != running)
+                     && (0u != state->anion_requested) && (0u == anion_fault))
+                    ? APL_SWITCH_ON : APL_SWITCH_OFF;
+#else
+    APL_UNUSED_PARAM(anion_fault);
+    targets.anion = APL_SWITCH_OFF;
+#endif
+#if APL_COMPILE_UV
+    targets.uv = ((0u != running)
+                  && (0u != state->uv_requested) && (0u != interlock)
+                  && (0u == uv_fault) && (0u == state->uv_fault)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
+#else
+    targets.uv = APL_SWITCH_OFF;
+#endif
 
     /* ops与旧实现一样在联锁回调前捕获，不能在提交阶段重新选择依赖。 */
     apl_core_outputs_apply(self, ops, &targets);
@@ -746,6 +819,8 @@ static void apl_core_factory_restore(struct apl_core *self) APL_CALL
     state->gear_before_sleep = state->fan_gear;
     state->wifi = APL_WIFI_OFF;
     state->purify_on = 0u;
+    state->uv_requested = 0u;
+    state->anion_requested = 0u;
     state->humidify_on = 1u;
     state->humidity_target = APL_HUMIDITY_TARGET_OFF;
     state->used = 0u;
@@ -1319,14 +1394,59 @@ enum apl_link_result apl_core_command(struct apl_core *self,
                            apl_core_panel_timer_expire, NULL);
         return APL_LINK_OK;
     case APL_LINK_CMD_PURIFY_TOGGLE:
+#if (APL_COMPILE_UV || APL_COMPILE_ANION)
+        if (0u == apl_core_on_or_standby(state))
+#else
         if ((0u == apl_core_has_purify(state)) || (0u == apl_core_on_or_standby(state)))
+#endif
         {
             return APL_LINK_REJECTED;
         }
         state->purify_on = (0u == state->purify_on) ? 1u : 0u;
+#if APL_COMPILE_UV
+        state->uv_requested = state->purify_on;
+#endif
+#if APL_COMPILE_ANION
+        state->anion_requested = state->purify_on;
+#endif
         state->uv_fault = 0u;
         apl_core_memory_notify(self);
         return APL_LINK_OK;
+    case APL_LINK_CMD_UV_SET:
+#if APL_COMPILE_UV
+        if ((0u == apl_core_on_or_standby(state)) || (command->arg > 1u))
+        {
+            return APL_LINK_REJECTED;
+        }
+        if ((state->uv_requested != command->arg) || ((0u != command->arg) && (0u != state->uv_fault)))
+        {
+            state->uv_requested = command->arg;
+            state->purify_on = ((0u != state->uv_requested) || (0u != state->anion_requested)) ? 1u : 0u;
+            state->uv_fault = 0u;
+            apl_core_beep_unless_sleep(state, APL_BEEP_SHORT);
+            apl_core_memory_notify(self);
+        }
+        return APL_LINK_OK;
+#else
+        return APL_LINK_REJECTED;
+#endif
+    case APL_LINK_CMD_ANION_SET:
+#if APL_COMPILE_ANION
+        if ((0u == apl_core_on_or_standby(state)) || (command->arg > 1u))
+        {
+            return APL_LINK_REJECTED;
+        }
+        if (state->anion_requested != command->arg)
+        {
+            state->anion_requested = command->arg;
+            state->purify_on = ((0u != state->uv_requested) || (0u != state->anion_requested)) ? 1u : 0u;
+            apl_core_beep_unless_sleep(state, APL_BEEP_SHORT);
+            apl_core_memory_notify(self);
+        }
+        return APL_LINK_OK;
+#else
+        return APL_LINK_REJECTED;
+#endif
     case APL_LINK_CMD_HUMIDIFY_TOGGLE:
         if ((0u == apl_core_has_humidify(state)) || (0u == apl_core_on_or_standby(state))
             || ((0u == state->humidify_on) && (0u == apl_core_water_ok(state))))
@@ -1342,6 +1462,12 @@ enum apl_link_result apl_core_command(struct apl_core *self,
         apl_core_memory_notify(self);
         return APL_LINK_OK;
     case APL_LINK_CMD_HUMIDITY_TARGET:
+#if !APL_COMPILE_SENSOR_HUMIDITY
+        if (APL_HUMIDITY_TARGET_OFF != command->arg)
+        {
+            return APL_LINK_REJECTED;
+        }
+#endif
         if ((0u == apl_core_has_humidify(state)) || (0u == apl_core_on_or_standby(state))
             || (0u == apl_core_target_is_valid(command->arg))
             || ((APL_HUMIDITY_TARGET_OFF != command->arg) && (0u == apl_core_water_ok(state))))
@@ -1353,6 +1479,9 @@ enum apl_link_result apl_core_command(struct apl_core *self,
     case APL_LINK_CMD_FILTER_RESET:
         return apl_core_cmd_filter_reset(self);
     case APL_LINK_CMD_WIFI_PAIR:
+#if !APL_COMPILE_WIFI
+        return APL_LINK_REJECTED;
+#else
         if (0u == apl_core_on_or_standby(state))
         {
             return APL_LINK_REJECTED;
@@ -1360,6 +1489,7 @@ enum apl_link_result apl_core_command(struct apl_core *self,
         state->wifi = APL_WIFI_PAIRING;
         state->wifi_left_s = APL_CORE_WIFI_PAIR_S;
         return APL_LINK_OK;
+#endif
     case APL_LINK_CMD_FACTORY_ENTER:
         return apl_core_cmd_factory_enter(self);
     case APL_LINK_CMD_FACTORY_EXIT:
@@ -1407,13 +1537,27 @@ void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot
     snapshot->filter_reset_seq = state->filter_reset_seq;
     snapshot->filter_reset_forced = state->filter_reset_forced;
     snapshot->factory_done = state->factory_done;
+    snapshot->purify_on = state->purify_on;
+    snapshot->module_faults = state->module_faults;
+#if APL_COMPILE_UV
+    snapshot->uv_enabled = 1u;
+    snapshot->uv_requested = state->uv_requested;
+    snapshot->uv_fault = state->uv_fault;
+#endif
+#if APL_COMPILE_ANION
+    snapshot->anion_enabled = 1u;
+    snapshot->anion_requested = state->anion_requested;
+#endif
+#if APL_COMPILE_WIFI
+    snapshot->wifi_enabled = 1u;
+#endif
     if (0u != apl_core_has_purify(state))
     {
         snapshot->purify_enabled = 1u;
         snapshot->purify_on = state->purify_on;
+
         snapshot->pm25 = state->pm25;
         snapshot->aq_level = state->aq_level;
-        snapshot->uv_fault = state->uv_fault;
         snapshot->filter_purify_left = apl_core_filter_left(state->filter_purify_s);
     }
 
@@ -1468,6 +1612,16 @@ void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory
         state->fan_gear = memory->fan_gear;
     }
 
+#if APL_COMPILE_UV
+    state->uv_requested = (1u == memory->module_state_valid)
+                          ? ((1u == memory->uv_requested) ? 1u : 0u)
+                          : ((0u != memory->purify_on) ? 1u : 0u);
+#endif
+#if APL_COMPILE_ANION
+    state->anion_requested = (1u == memory->module_state_valid)
+                             ? ((1u == memory->anion_requested) ? 1u : 0u)
+                             : ((0u != memory->purify_on) ? 1u : 0u);
+#endif
     state->used = (0u != memory->used) ? 1u : 0u;
     state->purify_on = (0u != memory->purify_on) ? 1u : 0u;
     state->humidify_on = (0u != memory->humidify_on) ? 1u : 0u;
@@ -1487,7 +1641,11 @@ void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected) APL_C
     }
 
     state = apl_core_state_of(self);
+#if APL_COMPILE_WIFI
     state->wifi = (0u != connected) ? APL_WIFI_CONNECTED : APL_WIFI_OFF;
+#else
+    state->wifi = APL_WIFI_OFF;
+#endif
     state->wifi_left_s = 0u;
 }
 

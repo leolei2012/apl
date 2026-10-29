@@ -43,7 +43,7 @@ APL_STATIC_ASSERT(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_H
                "上电全灯 2 秒");
 APL_STATIC_ASSERT(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
 APL_STATIC_ASSERT(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
-APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000104u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000200u, "版本号与分段宏不一致");
 APL_STATIC_ASSERT(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
 
 struct apl_hmi_key
@@ -2057,7 +2057,8 @@ void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *
     state->panel.snap_valid = 1u;
     if (NULL != state->panel.send)
     {
-        state->purify_enabled = (0u != snapshot->purify_enabled) ? 1u : 0u;
+        state->purify_enabled = ((0u != snapshot->purify_enabled) || (0u != snapshot->uv_enabled)
+                                 || (0u != snapshot->anion_enabled)) ? 1u : 0u;
         state->humidify_enabled = (0u != snapshot->humidify_enabled) ? 1u : 0u;
     }
 }
