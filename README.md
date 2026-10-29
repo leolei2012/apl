@@ -1,5 +1,7 @@
 # APL
 
+后续产品配置、业务仿真与 SDK 交付统一在 [Web APL Studio](apl_studio/README.md) 推进；`simulator/` 内的旧 Qt 工具保留作历史参考，不再继续功能开发。C 业务核心继续作为 SDK 和 Web 真实仿真的共同基础。
+
 空气净化与加湿库。库内不创建实例，使用方持有一份 `struct apl`。
 
 | 文件 | 职责 |

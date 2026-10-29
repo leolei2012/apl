@@ -4,7 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, renameSync } from 'node:fs'
 import { resolve, dirname, delimiter } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
-import { zipSync } from 'fflate'
+import { zipSync, unzipSync } from 'fflate'
 import { STUDIO_VERSION, ValidationError, type Product } from '@apl-studio/model'
 import type { BuildJob, NativeVerification } from '@apl-studio/model/template'
 import { safeRelative, type TemplateRegistry } from '@apl-studio/templates'
@@ -51,8 +51,36 @@ export class SdkBuildService {
   get(id: string): BuildJob { const job = this.jobs.get(id); if (!job) throw failure(404, '生成任务不存在', 'JOB_NOT_FOUND'); return structuredClone(job) }
   artifact(id: string): { bytes: Buffer; filename: string } {
     const job = this.get(id)
-    if (job.status !== 'succeeded') throw failure(409, 'SDK 尚未通过编译和消费验证，不能下载', 'SDK_NOT_VERIFIED')
-    return { bytes: readFileSync(resolve(this.directory, job.id, 'apl-sdk.zip')), filename: job.filename! }
+    if (job.status !== 'succeeded' || job.checks?.compile !== 'passed' || job.checks?.consumer !== 'passed') throw failure(409, 'SDK 尚未通过编译和消费验证，不能下载', 'SDK_NOT_VERIFIED')
+    let bytes: Buffer
+    try { bytes = readFileSync(resolve(this.directory, job.id, 'apl-sdk.zip')) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw failure(409, 'SDK 归档已丢失，请重新生成并验证', 'SDK_ARTIFACT_MISSING')
+      throw error
+    }
+    try {
+      // Check the bytes being returned against the original build record, not only the ZIP's own manifest.
+      const archive = unzipSync(bytes), manifestPath = 'apl-sdk/manifest.json'
+      const manifest = JSON.parse(Buffer.from(archive[manifestPath]).toString('utf8'))
+      const hashes = Object.fromEntries(Object.keys(archive).filter(path => path !== manifestPath).sort().map(path => {
+        if (!path.startsWith('apl-sdk/')) throw new Error('归档根目录无效')
+        const relative = safeRelative(path.slice('apl-sdk/'.length))
+        return [relative, createHash('sha256').update(archive[path]).digest('hex')]
+      }))
+      const fingerprint = createHash('sha256').update(JSON.stringify(hashes)).digest('hex')
+      if (fingerprint !== job.fingerprint || manifest.fingerprint !== fingerprint
+        || manifest.format !== 'apl-sdk' || manifest.schemaVersion !== 1 || manifest.sdkReady !== true
+        || !manifest.files || Array.isArray(manifest.files) || Object.keys(manifest.files).length !== Object.keys(hashes).length
+        || Object.entries(hashes).some(([path, hash]) => manifest.files[path] !== hash)
+        || manifest.product?.id !== job.productId || manifest.product?.revision !== job.revision
+        || manifest.product?.code !== job.productCode || manifest.product?.version !== job.sdkVersion
+        || manifest.template?.id !== job.template.id || manifest.template?.version !== job.template.version
+        || manifest.template?.fingerprint !== job.template.fingerprint || manifest.sourceVersion !== job.sourceVersion
+        || manifest.verification?.compile !== 'passed' || manifest.verification?.consumer !== 'passed') throw new Error('归档与已验证记录不一致')
+    } catch {
+      throw failure(409, 'SDK 归档校验未通过，请重新生成并验证', 'SDK_ARTIFACT_INVALID')
+    }
+    return { bytes, filename: job.filename! }
   }
   async create(product: Product): Promise<BuildJob> {
     if (this.closed) throw failure(503, '构建服务正在停止', 'SERVICE_CLOSING')

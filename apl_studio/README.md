@@ -40,7 +40,7 @@ npm start
 - JSON 导入导出与定义包。定义包标记 `sdkReady: false`，验证通过的源码 SDK 标记 `sdkReady: true`。
 - WebSocket 变更通知、重连、Ctrl+S、草稿保护与移动端布局。
 
-目前没有共享能力目录、MCP、账户、多租户或任意芯片工程生成。仿真支持 AP 与灯控的已接入版本，新增产品族需要自己的 C 宿主桥接。Qt 工具保留在 [simulator](../simulator/README.md)。
+目前没有共享能力目录、MCP、账户、多租户或任意芯片工程生成。仿真支持 AP 与灯控的已接入版本，新增产品族需要自己的 C 宿主桥接。后续仿真功能统一在 Web 推进；[simulator](../simulator/README.md) 内旧 Qt 工具保留作历史参考，不再继续功能开发。
 
 ## 目录与技术栈
 
