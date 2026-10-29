@@ -92,8 +92,8 @@ export class SdkBuildService {
     if (!provider) throw failure(409, '请先绑定可用的源码模板版本', 'SOURCE_TEMPLATE_REQUIRED')
     const errors = provider.validate(product.definition)
     if (errors.length) throw new ValidationError(errors.map(message => ({ path: 'template', message })))
-    const acceptance = provider.descriptor.workflow === 'purification-pm-v1' ? this.acceptance?.require(product) : undefined
-    if (provider.descriptor.workflow === 'purification-pm-v1' && !acceptance) throw failure(409, '当前标准方案需要真实C场景验收服务', 'ACCEPTANCE_REQUIRED')
+    const acceptance = !!provider.descriptor.workflow ? this.acceptance?.require(product) : undefined
+    if (!!provider.descriptor.workflow && !acceptance) throw failure(409, '当前标准方案需要真实C场景验收服务', 'ACCEPTANCE_REQUIRED')
     const verification = structuredClone(provider.descriptor.verification ?? { sourceDirectories: ['src', 'port', 'examples'], includeDirectories: ['include', 'config', 'port'], consumer: 'verification/smoke.c', scope: 'native C11 configuration and basic consumer' })
     for (const path of [...verification.sourceDirectories, ...verification.includeDirectories, verification.consumer]) safeRelative(path)
     const files = await provider.generate(structuredClone(product.definition))

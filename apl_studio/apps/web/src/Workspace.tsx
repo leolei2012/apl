@@ -21,7 +21,7 @@ export function Workspace({ product, draft, setDraft, tab, setTab, dirty, onFunc
 }) {
   const [search, setSearch] = useState('')
   const template = templates.find(t => t.id === draft.template?.id && t.version === draft.template.version)
-  if (template?.workflow === 'purification-pm-v1') return <PmWorkspace key={product.id} product={product} draft={draft} setDraft={setDraft} tab={tab} setTab={setTab} dirty={dirty} onSave={onSave} onExport={onExport} template={template}/>
+  if (!!template?.workflow) return <PmWorkspace key={product.id} product={product} draft={draft} setDraft={setDraft} tab={tab} setTab={setTab} dirty={dirty} onSave={onSave} onExport={onExport} template={template}/>
   const issues = template ? validateTemplateConfiguration(draft, template).map(message => ({ message })) : validateDefinition(draft)
   const configProps = { definition: draft, templates, onChange: setDraft, onBind }
   const change = <K extends keyof Definition>(key: K, value: Definition[K]) => setDraft({ ...draft, [key]: value })

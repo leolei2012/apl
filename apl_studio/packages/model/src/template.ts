@@ -15,7 +15,7 @@ export interface NativeVerification {
   sourceDirectories: string[]; includeDirectories: string[]; consumer: string; scope: string
 }
 export interface TemplateDescriptor {
-  workflow?: 'purification-pm-v1'
+  workflow?: 'purification-pm-v1' | 'air-care-standard-v1'
   engine?: 'apl-air-care-v1' | 'native-c-v1'
   productDefaults?: { code: string; category: string }
   previewFiles?: string[]
@@ -52,7 +52,7 @@ export function parameterIssue(parameter: TemplateParameter, value: unknown): st
 }
 export function validateTemplateConfiguration(definition: Definition, template: TemplateDescriptor): string[] {
   const errors = validateDefinition(definition).map(issue => issue.message)
-  if (template.workflow === 'purification-pm-v1' && Number(definition.functions.find(f => f.key === 'fan_speed')?.default) > 4) errors.push('本标准方案的开机档位请选择睡眠风速、一至三档或自动；极速由长按进入')
+  if (!!template.workflow && Number(definition.functions.find(f => f.key === 'fan_speed')?.default) > 4) errors.push('本标准方案的开机档位请选择睡眠风速、一至三档或自动；极速由长按进入')
   if (definition.template?.id !== template.id || definition.template.version !== template.version) errors.push('产品没有绑定此模板的精确版本')
   const enabled = new Set(definition.functions.map(f => f.key))
   for (const feature of template.features) {

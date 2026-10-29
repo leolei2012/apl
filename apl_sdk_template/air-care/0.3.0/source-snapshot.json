@@ -1,0 +1,21 @@
+{
+  "formatVersion": 1,
+  "templateVersion": "0.3.0",
+  "sourceVersion": "0.1.3",
+  "rootFiles": {
+    "src/apl.c": "a16ac68a993fa06ce12db0a5d71a5e81f390f60f175c4be0f163f4dc73bd3660",
+    "src/apl_core.c": "1d9ea7c9fe0ab442c35cd476a1ca356f11f338e480da59821ddbd546f831ecee",
+    "src/apl_hmi.c": "681e425d98c773e52a5fb2c7455beadd82f19c6a2c0121c741ecc8a5eb779583",
+    "include/apl.h": "4ced5eddb55b9658750d0bcb93ae298205f62d4aafe6ac90c600775f55e41895",
+    "include/apl_core.h": "1a0c1f4d9ba873f1789342e84f12509455ce200bbbfb0c90d06999dd5e6703d1",
+    "include/apl_hmi.h": "d8fca92602ac8ac932fed51268e9cb30128004025801ef990342dd7b4cffcf09",
+    "include/apl_platform.h": "b31d33afbb7cd5e909bf86d38804ecedcf79c8cb191460d2d97bfd4c96752e15",
+    "include/apl_type.h": "a456d06d2df59de3acc201421431d422f910ab3bde846f01323a0767d38e1dcd",
+    "config/apl_core_config.h": "2804b35170ffe1f8328c6035effc6edfe08a112b0e73e397dc5906dbcb24b9c3",
+    "config/apl_hmi_config.h": "4a3de64706ab467d106c1030f2bde65b01dcda2d6fbad00623a18a289f6aea5a"
+  },
+  "validationSource": {
+    "path": "tests/test_sdk_release.c",
+    "sha256": "af07c411272744478e0c7bb335bd901fef609e8c8642dbd591c881f43eab5952"
+  }
+}

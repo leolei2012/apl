@@ -65,7 +65,7 @@ test('AP 新旧版本可区分，0.1.1快照有根库来源哈希，旧产品保
   try {
     const old = f.registry.get('apl.air-care', '0.1.0')!, latest = f.registry.get('apl.air-care', '0.1.1')!
     const versions = (await f.app.inject('/api/templates')).json().templates
-    assert.deepEqual(versions.filter((t: { id: string }) => t.id === 'apl.air-care').map((t: { version: string }) => t.version).sort(), ['0.1.0', '0.1.1', '0.2.0'])
+    assert.deepEqual(versions.filter((t: { id: string }) => t.id === 'apl.air-care').map((t: { version: string }) => t.version).sort(), ['0.1.0', '0.1.1', '0.2.0', '0.3.0'])
     assert.equal(old.descriptor.sourceVersion, '0.1.0')
     assert.equal(latest.descriptor.sourceVersion, '0.1.1')
     assert.notEqual(old.descriptor.fingerprint, latest.descriptor.fingerprint)
