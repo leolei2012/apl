@@ -36,6 +36,32 @@ int main(void)
     struct host other_host;
     struct apl_core_memory memory;
     struct apl_link_snapshot snap;
+    /* 冷启动/恢复运行的首个零水位，及缺失/无效采样，均不得开启泵。 */
+    memset(&host, 0, sizeof(host));
+    apl_core_init(&self, &ops, &host);
+    apl_core_power_on(&self);
+    ticks(&self, 1u);
+    apl_core_get_snapshot(&self, &snap);
+    assert(APL_SWITCH_OFF == host.pump);
+    assert(APL_WATER_ALERT_NONE != snap.water_alert);
+    apl_core_get_memory(&self, &memory);
+    apl_core_init(&other, &ops, &host);
+    apl_core_memory_restore(&other, &memory);
+    ticks(&other, 1u);
+    assert(APL_SWITCH_OFF == host.pump);
+    apl_core_init(&other, NULL, &host);
+    apl_core_power_on(&other);
+    ticks(&other, 1u);
+    apl_core_get_snapshot(&other, &snap);
+    assert(APL_SWITCH_OFF == snap.pump);
+    start(&self, &host, APL_WATER_LEVEL_3);
+    assert(APL_SWITCH_ON == host.pump);
+    host.water = (enum apl_water_level)99;
+    ticks(&self, 1u);
+    assert(APL_SWITCH_OFF == host.pump);
+    host.water = APL_WATER_LEVEL_3;
+    ticks(&self, 1u);
+    assert(APL_SWITCH_ON == host.pump);
     /* 无泵输出历史：两个机型均应直接待机。 */
     start(&self, &host, APL_WATER_LEVEL_0);
     assert(APL_SWITCH_OFF == host.pump);

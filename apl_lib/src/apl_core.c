@@ -72,6 +72,7 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint16_t second_subtick;
     uint16_t pm25;
     uint8_t water_valid;
+    uint8_t water_sample_ok; /**< 本拍水位是否有效；边沿起点仍保留最后有效值。 */
     uint8_t outputs_valid;
     uint8_t purify_enabled;
     uint8_t humidify_enabled;
@@ -552,6 +553,8 @@ static void apl_core_outputs_update(struct apl_core *self) APL_CALL
     targets.pump = ((0u != running)
                     && (0u != apl_core_has_humidify(state))
                     && (0u != state->humidify_on)
+                    && (0u != state->water_sample_ok)
+                    && (APL_WATER_LEVEL_0 != state->water_level)
                     && (APL_FAN_GEAR_TURBO != state->fan_gear)
                     && (0u == state->shortage)
                     && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
@@ -609,6 +612,7 @@ static void apl_core_water_sample(struct apl_core *self) APL_CALL
     enum apl_water_level previous;
 
     state = apl_core_state_of(self);
+    state->water_sample_ok = 0u;
     if ((NULL == state->ops) || (NULL == state->ops->get_water_level))
     {
         return;
@@ -619,11 +623,17 @@ static void apl_core_water_sample(struct apl_core *self) APL_CALL
     {
         return;
     }
+    state->water_sample_ok = 1u;
 
     if (0u == state->water_valid)
     {
         state->water_level = level;
         state->water_valid = 1u;
+        if ((APL_RUN_ON == state->run_state) && (APL_WATER_LEVEL_0 == level))
+        {
+            /* 恢复运行后的首个零水位也必须保护；不是伪造下降沿回调。 */
+            apl_core_shortage_start(state);
+        }
         return;
     }
 
