@@ -437,14 +437,72 @@ static void apl_core_humidity_hold_update(struct apl_core_state *state)
     }
 }
 
-static void apl_core_outputs_update(struct apl_core *self)
+/** 仲裁后的执行器目标。仅在本拍栈上存在，不改变对象或公开接口布局。 */
+struct apl_core_output_targets
 {
-    struct apl_core_state *state;
     enum apl_switch fan;
-    enum apl_fan_gear output;
+    enum apl_fan_gear fan_gear;
     enum apl_switch pump;
     enum apl_switch uv;
     enum apl_switch anion;
+};
+
+/** 按原顺序提交变化；每次回调前只更新对应执行器，保留回调内可见快照。 */
+static void apl_core_outputs_apply(struct apl_core *self,
+                                   const struct apl_core_ops *ops,
+                                   const struct apl_core_output_targets *targets)
+{
+    struct apl_core_state *state;
+
+    state = apl_core_state_of(self);
+    if ((0u == state->outputs_valid) || (targets->fan != state->fan)
+        || (targets->fan_gear != state->fan_output))
+    {
+        state->fan = targets->fan;
+        state->fan_output = targets->fan_gear;
+        /* 第一拍风机本来就停着，不必再发一次「关」。 */
+        if ((NULL != ops) && (NULL != ops->set_fan)
+            && ((0u != state->outputs_valid) || (APL_SWITCH_ON == targets->fan)))
+        {
+            ops->set_fan(targets->fan, targets->fan_gear, state->ctx);
+        }
+    }
+
+    if (targets->pump != state->pump)
+    {
+        state->pump = targets->pump;
+        if ((NULL != ops) && (NULL != ops->set_pump))
+        {
+            ops->set_pump(targets->pump, state->ctx);
+        }
+    }
+
+    if (targets->uv != state->uv)
+    {
+        state->uv = targets->uv;
+        if ((NULL != ops) && (NULL != ops->set_uv))
+        {
+            ops->set_uv(targets->uv, state->ctx);
+        }
+    }
+
+    if (targets->anion != state->anion)
+    {
+        state->anion = targets->anion;
+        if ((NULL != ops) && (NULL != ops->set_anion))
+        {
+            ops->set_anion(targets->anion, state->ctx);
+        }
+    }
+
+    state->outputs_valid = 1u;
+}
+
+/** 保留原有策略及副作用的计算时机，再交由统一执行器边界提交。 */
+static void apl_core_outputs_update(struct apl_core *self)
+{
+    struct apl_core_state *state;
+    struct apl_core_output_targets targets;
     uint8_t running;
     uint8_t interlock;
     const struct apl_core_ops *ops;
@@ -453,17 +511,18 @@ static void apl_core_outputs_update(struct apl_core *self)
     ops = state->ops;
     running = (APL_RUN_ON == state->run_state) ? 1u : 0u;
 
-    fan = ((0u != running) || (APL_RUN_DRY == state->run_state)) ? APL_SWITCH_ON
-                                                                 : APL_SWITCH_OFF;
-    output = (APL_SWITCH_ON == fan) ? apl_core_fan_output_compute(state) : state->fan_output;
+    targets.fan = ((0u != running) || (APL_RUN_DRY == state->run_state)) ? APL_SWITCH_ON
+                                                                    : APL_SWITCH_OFF;
+    targets.fan_gear = (APL_SWITCH_ON == targets.fan) ? apl_core_fan_output_compute(state)
+                                                    : state->fan_output;
 
     apl_core_humidity_hold_update(state);
-    pump = ((0u != running)
-            && (0u != apl_core_has_humidify(state))
-            && (0u != state->humidify_on)
-            && (APL_FAN_GEAR_TURBO != state->fan_gear)
-            && (0u == state->shortage)
-            && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
+    targets.pump = ((0u != running)
+                    && (0u != apl_core_has_humidify(state))
+                    && (0u != state->humidify_on)
+                    && (APL_FAN_GEAR_TURBO != state->fan_gear)
+                    && (0u == state->shortage)
+                    && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
 
     interlock = 1u;
     if ((NULL != ops) && (NULL != ops->get_uv_interlock))
@@ -477,51 +536,13 @@ static void apl_core_outputs_update(struct apl_core *self)
         apl_core_beep(state, APL_BEEP_UV_ALARM);
     }
 
-    anion = ((0u != running) && (0u != apl_core_has_purify(state)) && (0u != state->purify_on))
-            ? APL_SWITCH_ON : APL_SWITCH_OFF;
-    uv = ((APL_SWITCH_ON == anion) && (0u != interlock) && (0u == state->uv_fault))
-         ? APL_SWITCH_ON : APL_SWITCH_OFF;
+    targets.anion = ((0u != running) && (0u != apl_core_has_purify(state))
+                     && (0u != state->purify_on)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
+    targets.uv = ((APL_SWITCH_ON == targets.anion) && (0u != interlock)
+                  && (0u == state->uv_fault)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
 
-    if ((0u == state->outputs_valid) || (fan != state->fan) || (output != state->fan_output))
-    {
-        state->fan = fan;
-        state->fan_output = output;
-        /* 第一拍风机本来就停着，不必再发一次「关」。 */
-        if ((NULL != ops) && (NULL != ops->set_fan)
-            && ((0u != state->outputs_valid) || (APL_SWITCH_ON == fan)))
-        {
-            ops->set_fan(fan, output, state->ctx);
-        }
-    }
-
-    if (pump != state->pump)
-    {
-        state->pump = pump;
-        if ((NULL != ops) && (NULL != ops->set_pump))
-        {
-            ops->set_pump(pump, state->ctx);
-        }
-    }
-
-    if (uv != state->uv)
-    {
-        state->uv = uv;
-        if ((NULL != ops) && (NULL != ops->set_uv))
-        {
-            ops->set_uv(uv, state->ctx);
-        }
-    }
-
-    if (anion != state->anion)
-    {
-        state->anion = anion;
-        if ((NULL != ops) && (NULL != ops->set_anion))
-        {
-            ops->set_anion(anion, state->ctx);
-        }
-    }
-
-    state->outputs_valid = 1u;
+    /* ops与旧实现一样在联锁回调前捕获，不能在提交阶段重新选择依赖。 */
+    apl_core_outputs_apply(self, ops, &targets);
 }
 
 static void apl_core_shortage_start(struct apl_core_state *state)
