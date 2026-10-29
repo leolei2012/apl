@@ -1,5 +1,5 @@
 import type { Definition, Product, Revision } from '@apl-studio/model'
-import type { BuildJob, TemplateDescriptor } from '@apl-studio/model/template'
+import type { AcceptanceReport, BuildJob, TemplateDescriptor } from '@apl-studio/model/template'
 import type { SimulationAction, SimulationDescriptor, SimulationSession } from '@apl-studio/model/simulation'
 export class ApiError extends Error { constructor(message: string, public status: number, public code?: string) { super(message) } }
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -11,8 +11,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.status === 204 ? undefined as T : response.json()
 }
 export const api = {
+  acceptance: (id: string) => request<{ report: AcceptanceReport | null; current: boolean }>('/products/' + id + '/acceptance'),
+  runAcceptance: (product: Product) => request<AcceptanceReport>('/acceptance/run', { method: 'POST', body: JSON.stringify({ productId: product.id, revision: product.revision }) }),
   simulationInfo: (productId: string) => request<{ descriptor: SimulationDescriptor | null }>('/products/' + productId + '/simulation'),
-  startSimulation: (product: Product) => request<SimulationSession>('/simulation/sessions', { method: 'POST', body: JSON.stringify({ productId: product.id, revision: product.revision }) }),
+  startSimulation: (product: Product, running = true) => request<SimulationSession>('/simulation/sessions', { method: 'POST', body: JSON.stringify({ productId: product.id, revision: product.revision, running }) }),
   simulation: (id: string) => request<SimulationSession>('/simulation/sessions/' + id),
   simulate: (id: string, action: SimulationAction) => request<SimulationSession>('/simulation/sessions/' + id + '/actions', { method: 'POST', body: JSON.stringify(action) }),
   stopSimulation: (id: string) => request<void>('/simulation/sessions/' + id, { method: 'DELETE' }),

@@ -9,6 +9,8 @@ import { STUDIO_VERSION, ValidationError, type Product } from '@apl-studio/model
 import type { BuildJob, NativeVerification } from '@apl-studio/model/template'
 import { safeRelative, type TemplateRegistry } from '@apl-studio/templates'
 import { SimulationService } from './simulation'
+import { AcceptanceService } from './acceptance'
+export { AcceptanceService } from './acceptance'
 export { SimulationService } from './simulation'
 export { simulationAdapters, type SimulationAdapter } from './simulation-adapters'
 
@@ -33,7 +35,7 @@ export class SdkBuildService {
   private running?: Promise<void>
   private closed = false
   readonly directory: string
-  constructor(directory: string, private registry: TemplateRegistry, private compiler = defaultCompiler(), private notify: (job: BuildJob) => void = () => {}) {
+  constructor(directory: string, private registry: TemplateRegistry, private compiler = defaultCompiler(), private notify: (job: BuildJob) => void = () => {}, private acceptance?: AcceptanceService) {
     this.directory = resolve(directory)
     mkdirSync(this.directory, { recursive: true })
     for (const entry of readdirSync(this.directory, { withFileTypes: true })) {
@@ -76,7 +78,8 @@ export class SdkBuildService {
         || manifest.product?.code !== job.productCode || manifest.product?.version !== job.sdkVersion
         || manifest.template?.id !== job.template.id || manifest.template?.version !== job.template.version
         || manifest.template?.fingerprint !== job.template.fingerprint || manifest.sourceVersion !== job.sourceVersion
-        || manifest.verification?.compile !== 'passed' || manifest.verification?.consumer !== 'passed') throw new Error('归档与已验证记录不一致')
+        || manifest.verification?.compile !== 'passed' || manifest.verification?.consumer !== 'passed'
+        || JSON.stringify(manifest.verification?.acceptance ?? null) !== JSON.stringify(job.acceptance ?? null)) throw new Error('归档与已验证记录不一致')
     } catch {
       throw failure(409, 'SDK 归档校验未通过，请重新生成并验证', 'SDK_ARTIFACT_INVALID')
     }
@@ -89,15 +92,23 @@ export class SdkBuildService {
     if (!provider) throw failure(409, '请先绑定可用的源码模板版本', 'SOURCE_TEMPLATE_REQUIRED')
     const errors = provider.validate(product.definition)
     if (errors.length) throw new ValidationError(errors.map(message => ({ path: 'template', message })))
+    const acceptance = provider.descriptor.workflow === 'purification-pm-v1' ? this.acceptance?.require(product) : undefined
+    if (provider.descriptor.workflow === 'purification-pm-v1' && !acceptance) throw failure(409, '当前标准方案需要真实C场景验收服务', 'ACCEPTANCE_REQUIRED')
     const verification = structuredClone(provider.descriptor.verification ?? { sourceDirectories: ['src', 'port', 'examples'], includeDirectories: ['include', 'config', 'port'], consumer: 'verification/smoke.c', scope: 'native C11 configuration and basic consumer' })
     for (const path of [...verification.sourceDirectories, ...verification.includeDirectories, verification.consumer]) safeRelative(path)
     const files = await provider.generate(structuredClone(product.definition))
+    if (acceptance) this.acceptance!.requireSource(acceptance, files)
+    if (acceptance) for (const [path, bytes] of this.acceptance!.deliverables(product, provider, acceptance)) {
+      if (files.has(path)) throw new Error('模板占用了交付说明文件：' + path)
+      files.set(path, bytes)
+    }
     validateFiles(files)
     if (!files.has(verification.consumer)) throw new Error('模板缺少声明的消费验证程序')
     // Own all bytes now: later product or provider edits cannot change this job.
     const snapshot = new Map([...files].map(([path, bytes]) => [path, Uint8Array.from(bytes)]))
     const now = new Date().toISOString()
     const job: BuildJob = { id: randomUUID(), productId: product.id, revision: product.revision, productName: product.definition.name, productCode: product.definition.code,
+      ...(acceptance ? { acceptance: { id: acceptance.id, fingerprint: acceptance.fingerprint!, scope: acceptance.scope, sourceFingerprint: acceptance.sourceFingerprint } } : {}),
       sdkVersion: product.definition.sdkVersion, template: { id: reference!.id, version: reference!.version, fingerprint: provider.descriptor.fingerprint },
       createdAt: now, updatedAt: now, sourceVersion: provider.descriptor.sourceVersion, verificationScope: verification.scope, status: 'queued', phase: '等待编译', diagnostics: '', compilerVersion: '', checks: { compile: 'pending', consumer: 'pending' } }
     mkdirSync(resolve(this.directory, job.id), { recursive: true })
@@ -163,7 +174,7 @@ export class SdkBuildService {
       job.fingerprint = createHash('sha256').update(JSON.stringify(hashes)).digest('hex')
       const manifest = { format: 'apl-sdk', schemaVersion: 1, studioVersion: STUDIO_VERSION, product: { id: job.productId, revision: job.revision, code: job.productCode, version: job.sdkVersion },
         template: job.template, sourceVersion: job.sourceVersion,
-        fingerprint: job.fingerprint, files: hashes, sdkReady: true, verification: { ...job.checks, compiler: job.compilerVersion, scope: verification.scope } }
+        fingerprint: job.fingerprint, files: hashes, sdkReady: true, verification: { ...job.checks, ...(job.acceptance ? { acceptance: job.acceptance } : {}), compiler: job.compilerVersion, scope: verification.scope } }
       files.set('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'))
       writeFileSync(resolve(sdk, 'manifest.json'), files.get('manifest.json')!)
       const archive: Record<string, [Uint8Array, { mtime: Date }]> = {}
@@ -193,13 +204,15 @@ export const inject = ['templates']
 export interface Config { directory: string; compiler?: string }
 export const Config: z<Config> = z.object({ directory: z.string().required(), compiler: z.string() })
 declare module 'cordis' {
-  interface Context { sdkBuilds: SdkBuildService; simulations: SimulationService }
+  interface Context { sdkBuilds: SdkBuildService; simulations: SimulationService; acceptances: AcceptanceService }
   interface Events { 'sdk/changed'(job: BuildJob): void }
 }
 export function apply(ctx: Context, config: Config) {
-  const service = new SdkBuildService(config.directory, ctx.templates, config.compiler, job => ctx.emit('sdk/changed', job))
-  ctx.provide('sdkBuilds', service)
   const simulations = new SimulationService(resolve(config.directory, '../simulation'), ctx.templates, config.compiler)
+  const acceptances = new AcceptanceService(resolve(config.directory, '../acceptance'), ctx.templates, simulations)
+  const service = new SdkBuildService(config.directory, ctx.templates, config.compiler, job => ctx.emit('sdk/changed', job), acceptances)
+  ctx.provide('sdkBuilds', service)
   ctx.provide('simulations', simulations)
-  ctx.effect(() => async () => { await simulations.close(); await service.close() })
+  ctx.provide('acceptances', acceptances)
+  ctx.effect(() => async () => { await simulations.close(); await acceptances.close(); await service.close() })
 }

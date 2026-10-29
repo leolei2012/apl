@@ -2,7 +2,7 @@ import { parseDefinition, validateDefinition, validateValue, type Definition, ty
 
 export interface ConfigBinding { path: string; macro: string }
 export interface TemplateFeature {
-  key: string; name: string; description: string; required?: boolean; enabledByDefault?: boolean; requires?: string[]
+  key: string; name: string; description: string; required?: boolean; enabledByDefault?: boolean; requires?: string[]; available?: boolean
   definition: FunctionDefinition
   enabledBindings?: ConfigBinding[]; defaultBinding?: ConfigBinding
 }
@@ -15,6 +15,7 @@ export interface NativeVerification {
   sourceDirectories: string[]; includeDirectories: string[]; consumer: string; scope: string
 }
 export interface TemplateDescriptor {
+  workflow?: 'purification-pm-v1'
   engine?: 'apl-air-care-v1' | 'native-c-v1'
   productDefaults?: { code: string; category: string }
   previewFiles?: string[]
@@ -24,12 +25,22 @@ export interface TemplateDescriptor {
   constraints: { kind: 'atLeastOne'; features: string[]; message: string }[]
 }
 export interface BuildJob {
+  acceptance?: { id: string; fingerprint: string; scope: string; sourceFingerprint: string }
   id: string; productId: string; revision: number; productName: string; productCode: string; sdkVersion: string
   template: { id: string; version: string; fingerprint: string }; createdAt: string; updatedAt: string
   sourceVersion?: string; verificationScope?: string
   status: 'queued' | 'building' | 'succeeded' | 'failed' | 'cancelled'
   phase: string; diagnostics: string; compilerVersion: string; fingerprint?: string; filename?: string
   checks: { compile: 'pending' | 'passed' | 'failed'; consumer: 'pending' | 'passed' | 'failed' }
+}
+export interface AcceptanceCheck {
+  name: string; expected: Record<string, Value>; actual: Record<string, Value>; passed: boolean; ms: number
+}
+export interface AcceptanceReport {
+  id: string; productId: string; revision: number; definitionFingerprint: string
+  template: { id: string; version: string; fingerprint: string }; sourceVersion: string; sourceFingerprint: string; driverFingerprint: string
+  status: 'running' | 'passed' | 'failed'; createdAt: string; finishedAt?: string; fingerprint?: string
+  scope: string; checks: AcceptanceCheck[]; diagnostics: string
 }
 export function activeFor(requires: string[] | undefined, enabled: Set<string>): boolean { return !requires || requires.every(key => enabled.has(key)) }
 export function parameterIssue(parameter: TemplateParameter, value: unknown): string | null {
@@ -41,10 +52,12 @@ export function parameterIssue(parameter: TemplateParameter, value: unknown): st
 }
 export function validateTemplateConfiguration(definition: Definition, template: TemplateDescriptor): string[] {
   const errors = validateDefinition(definition).map(issue => issue.message)
+  if (template.workflow === 'purification-pm-v1' && Number(definition.functions.find(f => f.key === 'fan_speed')?.default) > 4) errors.push('本标准方案的开机档位请选择睡眠风速、一至三档或自动；极速由长按进入')
   if (definition.template?.id !== template.id || definition.template.version !== template.version) errors.push('产品没有绑定此模板的精确版本')
   const enabled = new Set(definition.functions.map(f => f.key))
   for (const feature of template.features) {
     const field = definition.functions.find(f => f.key === feature.key)
+    if (field && feature.available === false) errors.push(`当前标准方案不提供：${feature.name}`)
     if (!field) { if (feature.required) errors.push(`缺少必选功能：${feature.name}`); continue }
     if (!activeFor(feature.requires, enabled)) errors.push(`${feature.name}依赖：${feature.requires?.join('、')}`)
     const canonical = feature.definition
@@ -67,9 +80,12 @@ export function validateTemplateConfiguration(definition: Definition, template: 
 /** Explicitly applying a template normalizes the model; ordinary save never discards fields. */
 export function applyTemplate(definition: Definition, template: TemplateDescriptor, selection?: Set<string>): Definition {
   const enabled = selection ? new Set(selection) : new Set(definition.functions.length
-    ? definition.functions.filter(f => template.features.some(t => t.key === f.key)).map(f => f.key)
-    : template.features.filter(f => f.enabledByDefault).map(f => f.key))
-  for (const feature of template.features) if (feature.required) enabled.add(feature.key)
+    ? definition.functions.filter(f => template.features.some(t => t.key === f.key && t.available !== false)).map(f => f.key)
+    : template.features.filter(f => f.enabledByDefault && f.available !== false).map(f => f.key))
+  for (const feature of template.features) {
+    if (feature.available === false) enabled.delete(feature.key)
+    else if (feature.required) enabled.add(feature.key)
+  }
   if (!selection) {
     let changed = true
     while (changed) { changed = false; for (const feature of template.features) if (enabled.has(feature.key)) for (const dependency of feature.requires ?? []) if (!enabled.has(dependency)) { enabled.add(dependency); changed = true } }
@@ -90,7 +106,7 @@ export function applyTemplate(definition: Definition, template: TemplateDescript
 export function toggleTemplateFeature(definition: Definition, template: TemplateDescriptor, key: string, on: boolean): Definition {
   const enabled = new Set(definition.functions.map(f => f.key))
   const feature = template.features.find(f => f.key === key)
-  if (!feature || feature.required) return definition
+  if (!feature || feature.required || feature.available === false) return definition
   if (on) {
     enabled.add(key)
     let changed = true

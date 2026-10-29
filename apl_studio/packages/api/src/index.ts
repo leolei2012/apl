@@ -9,7 +9,7 @@ import { parseDefinition, validateDefinition, interfaceHeader, STUDIO_VERSION, V
 import { definitionPackage } from '@apl-studio/definition'
 import { problem, type ProductStore } from '@apl-studio/product'
 import type { TemplateRegistry } from '@apl-studio/templates'
-import type { SdkBuildService, SimulationService } from '@apl-studio/build'
+import type { SdkBuildService, SimulationService, AcceptanceService } from '@apl-studio/build'
 import type { SimulationAction } from '@apl-studio/model/simulation'
 import { applyTemplate } from '@apl-studio/model/template'
 
@@ -17,7 +17,7 @@ export const name = 'api'
 export const inject = ['products', 'templates']
 export interface Config { host: string; port: number; staticDir: string }
 export const Config: z<Config> = z.object({ host: z.string().default('127.0.0.1'), port: z.number().default(9190), staticDir: z.string() })
-export function createApi(products: ProductStore, templates: TemplateRegistry, staticDir?: string, builds?: SdkBuildService, simulations?: SimulationService): FastifyInstance {
+export function createApi(products: ProductStore, templates: TemplateRegistry, staticDir?: string, builds?: SdkBuildService, simulations?: SimulationService, acceptances?: AcceptanceService): FastifyInstance {
   const app = Fastify({ bodyLimit: 1024 * 1024, logger: false })
   app.setErrorHandler((error, _request, reply) => {
     const status = (error as { statusCode?: number }).statusCode ?? 500
@@ -71,6 +71,18 @@ export function createApi(products: ProductStore, templates: TemplateRegistry, s
     return reply.header('Content-Disposition', `attachment; filename="${pack.filename}"`).header('X-Definition-Fingerprint', pack.fingerprint).type('application/zip').send(Buffer.from(pack.bytes))
   })
   app.get('/api/templates', async () => ({ templates: templates.list(), status: templates.list().length ? 'ready' : 'awaiting-source-template' }))
+  app.get<{ Params: { id: string } }>('/api/products/:id/acceptance', async request => {
+    if (!acceptances) throw problem(409, '场景验收服务尚未接入', 'ACCEPTANCE_UNAVAILABLE')
+    return acceptances.latest(products.get(request.params.id))
+  })
+  app.post<{ Body: { productId: string; revision: number } }>('/api/acceptance/run', async (request, reply) => {
+    if (!acceptances) throw problem(409, '场景验收服务尚未接入', 'ACCEPTANCE_UNAVAILABLE')
+    const body = request.body
+    if (!body || typeof body.productId !== 'string' || !Number.isSafeInteger(body.revision) || Object.keys(body).some(key => !['productId', 'revision'].includes(key))) throw problem(400, '仅接受产品和修订号，验收结果由服务器运行真实C取得', 'INVALID_ACCEPTANCE_REQUEST')
+    const product = products.get(body.productId)
+    if (product.revision !== body.revision) throw problem(409, '产品已更新，请保存并读取最新修订后验收', 'REVISION_CONFLICT')
+    return reply.code(202).send(acceptances.run(product))
+  })
   app.post<{ Params: { id: string; version: string }; Body: { definition: unknown } }>('/api/templates/:id/:version/configure', async request => {
     const provider = templates.get(request.params.id, request.params.version)
     if (!provider) throw problem(404, '源码模板版本不存在', 'TEMPLATE_UNAVAILABLE')
@@ -129,7 +141,7 @@ export function createApi(products: ProductStore, templates: TemplateRegistry, s
 }
 declare module 'cordis' { interface Context { api: FastifyInstance } }
 export function apply(ctx: Context, config: Config) {
-  const app = createApi(ctx.products, ctx.templates, config.staticDir, ctx.get('sdkBuilds', false), ctx.get('simulations', false))
+  const app = createApi(ctx.products, ctx.templates, config.staticDir, ctx.get('sdkBuilds', false), ctx.get('simulations', false), ctx.get('acceptances', false))
   ctx.provide('api', app)
   ctx.effect(() => () => app.close())
   ctx.on('product/changed', (id, revision) => {
