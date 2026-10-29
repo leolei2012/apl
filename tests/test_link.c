@@ -640,7 +640,7 @@ static void test_purify(void)
     EXPECT(36u == snap_of(&core).pm25);
     if (!HAS_HUMIDIFY)
     {
-        EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+        EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
     }
     host.hcho = 51u;
     core_seconds(&core, 1u);
@@ -1035,6 +1035,92 @@ static void test_hmi_resources(void)
     }
 }
 
+/** 标准化工作簿：净化器交互逻辑 F9。自动输出睡眠风速不等于进入睡眠模式。 */
+static void test_purify_auto_bands(void)
+{
+    static const struct
+    {
+        uint16_t pm25;
+        enum apl_fan_gear output;
+    } cases[] = {
+        { 0u, APL_FAN_GEAR_SLEEP },
+        { 35u, APL_FAN_GEAR_SLEEP },
+        { 36u, APL_FAN_GEAR_1 },
+        { 75u, APL_FAN_GEAR_1 },
+        { 76u, APL_FAN_GEAR_2 },
+        { 150u, APL_FAN_GEAR_2 },
+        { 151u, APL_FAN_GEAR_3 },
+        { UINT16_MAX, APL_FAN_GEAR_3 },
+        { 35u, APL_FAN_GEAR_SLEEP }
+    };
+    static const enum apl_fan_gear manual[] = {
+        APL_FAN_GEAR_SLEEP, APL_FAN_GEAR_1, APL_FAN_GEAR_2,
+        APL_FAN_GEAR_3, APL_FAN_GEAR_TURBO
+    };
+    struct apl machine;
+    struct host host;
+    struct apl_link_snapshot snap;
+    unsigned index;
+    unsigned selected;
+    uint8_t beep_seq;
+
+    if (!HAS_PURIFY || HAS_HUMIDIFY)
+    {
+        return;
+    }
+
+    machine_start(&machine, &host);
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_POWER, 0u));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
+    beep_seq = snap_of(&machine.core).beep_seq;
+    for (index = 0u; index < sizeof(cases) / sizeof(cases[0]); index++)
+    {
+        host.pm25 = cases[index].pm25;
+        machine_ticks(&machine, TICKS_PER_S + 1u);
+        snap = snap_of(&machine.core);
+        EXPECT(cases[index].output == host.fan_gear);
+        EXPECT(cases[index].output == snap.fan_output);
+        EXPECT(APL_SWITCH_ON == host.fan);
+        EXPECT(APL_RUN_ON == snap.run_state);
+        EXPECT(APL_FAN_GEAR_AUTO == snap.fan_gear);
+        EXPECT(0u == snap.sleep);
+        EXPECT(beep_seq == snap.beep_seq);
+        EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_AUTO));
+        EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
+    }
+    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_digits_brightness(&machine.hmi));
+
+    /* 手动档位不跟随PM2.5变化，显式睡眠的语义保持不变。 */
+    for (selected = 0u; selected < sizeof(manual) / sizeof(manual[0]); selected++)
+    {
+        EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, (uint8_t)manual[selected]));
+        for (index = 0u; index < 2u; index++)
+        {
+            host.pm25 = (0u == index) ? 0u : UINT16_MAX;
+            machine_ticks(&machine, TICKS_PER_S + 1u);
+            snap = snap_of(&machine.core);
+            EXPECT(manual[selected] == snap.fan_gear);
+            EXPECT(manual[selected] == host.fan_gear);
+            EXPECT((APL_FAN_GEAR_SLEEP == manual[selected]) == (0u != snap.sleep));
+        }
+    }
+
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
+    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    EXPECT(1u == snap_of(&machine.core).sleep);
+    EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
+    host.pm25 = 35u;
+    machine_ticks(&machine, TICKS_PER_S + 1u);
+    snap = snap_of(&machine.core);
+    EXPECT(APL_FAN_GEAR_AUTO == snap.fan_gear);
+    EXPECT(APL_FAN_GEAR_SLEEP == snap.fan_output);
+    EXPECT(0u == snap.sleep);
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_AUTO));
+}
+
 int main(void)
 {
     test_reject();
@@ -1049,6 +1135,7 @@ int main(void)
     test_panel();
     test_panel_factory();
     test_hmi_resources();
+    test_purify_auto_bands();
 
     if (0 != g_failed)
     {

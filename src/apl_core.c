@@ -334,15 +334,17 @@ static enum apl_fan_gear apl_core_humidity_gear(const struct apl_core_state *sta
     return APL_FAN_GEAR_3;
 }
 
-/** 自动档按空气质量。优一档、良二档、中度和重度三档（待确认：原表未给对应关系）。 */
+/** 纯净化按标准化表输出睡眠/一/二/三档；带加湿能力的映射暂保留原规则。 */
 static enum apl_fan_gear apl_core_aq_gear(const struct apl_core_state *state)
 {
     switch (state->aq_level)
     {
     case APL_AQ_EXCELLENT:
-        return APL_FAN_GEAR_1;
+        return (0u != apl_core_has_humidify(state)) ? APL_FAN_GEAR_1 : APL_FAN_GEAR_SLEEP;
     case APL_AQ_GOOD:
-        return APL_FAN_GEAR_2;
+        return (0u != apl_core_has_humidify(state)) ? APL_FAN_GEAR_2 : APL_FAN_GEAR_1;
+    case APL_AQ_MODERATE:
+        return (0u != apl_core_has_humidify(state)) ? APL_FAN_GEAR_3 : APL_FAN_GEAR_2;
     default:
         return APL_FAN_GEAR_3;
     }
