@@ -369,8 +369,8 @@ static void test_timer_turbo_sleep(void)
     core_seconds(&core, 3599u);
     EXPECT(APL_RUN_ON == apl_core_get_run_state(&core));
     core_seconds(&core, 1u);
-    /* 定时到期整机关机进入待机，不走风干。 */
-    EXPECT(APL_RUN_STANDBY == apl_core_get_run_state(&core));
+    /* 定时到期走正常关机；本周期泵运行过时进入风干。 */
+    EXPECT((HAS_HUMIDIFY ? APL_RUN_DRY : APL_RUN_STANDBY) == apl_core_get_run_state(&core));
 
     (void)cmd(&core, APL_LINK_CMD_POWER, 0u);
     EXPECT(APL_LINK_OK == cmd(&core, APL_LINK_CMD_TIMER_SET, 2u));
@@ -873,7 +873,7 @@ static void test_panel(void)
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
     machine_ticks(&machine, 2u);
     EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
-    machine_ticks(&machine, APL_HMI_IDLE_TICKS);
+    machine_ticks(&machine, APL_HMI_SLEEP_IDLE_TICKS);
     EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 只唤醒 */
     EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
@@ -1112,7 +1112,7 @@ static void test_purify_auto_bands(void)
 
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
-    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    machine_ticks(&machine, APL_HMI_SLEEP_IDLE_TICKS + 1u);
     EXPECT(1u == snap_of(&machine.core).sleep);
     EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
@@ -1216,7 +1216,7 @@ static void test_humidify_auto_bands(void)
     machine_ticks(&machine, TICKS_PER_S + 1u);
     EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
-    machine_ticks(&machine, APL_HMI_IDLE_TICKS + 1u);
+    machine_ticks(&machine, APL_HMI_SLEEP_IDLE_TICKS + 1u);
     EXPECT(1u == snap_of(&machine.core).sleep);
     EXPECT(0u == apl_hmi_get_digits_brightness(&machine.hmi));
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));

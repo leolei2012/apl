@@ -43,7 +43,7 @@ APL_STATIC_ASSERT(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_H
                "上电全灯 2 秒");
 APL_STATIC_ASSERT(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
 APL_STATIC_ASSERT(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
-APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000103u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000104u, "版本号与分段宏不一致");
 APL_STATIC_ASSERT(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
 
 struct apl_hmi_key
@@ -82,6 +82,8 @@ struct apl_hmi_panel
     enum apl_run_state prev_run;
     uint16_t wake_ticks;
     uint16_t setting_ticks;
+    uint16_t timer_repeat_ticks;
+    uint8_t timer_editing;
     uint16_t query_ticks;
     uint16_t rotate_ticks;
     uint16_t red_blink_ticks;
@@ -397,6 +399,9 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
                               uint8_t index,
                               uint8_t is_long) APL_CALL;
 static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL;
+static uint8_t apl_hmi_panel_dark(const struct apl_hmi_state *state) APL_CALL;
+static void apl_hmi_panel_timer_key(struct apl_hmi_state *state) APL_CALL;
+
 static void apl_hmi_buzzer_tick(struct apl_hmi_state *state) APL_CALL;
 
 /**
@@ -524,6 +529,51 @@ static uint8_t apl_hmi_combos_update(struct apl_hmi *self,
     return suppress;
 }
 
+/** D21：仅在定时设置中武装连增，设置外3秒长按仍负责童锁。 */
+static void apl_hmi_timer_repeat(struct apl_hmi_state *state,
+                                 struct apl_hmi_key_track *track,
+                                 uint8_t down_mask,
+                                 uint8_t suppress,
+                                 uint8_t locked) APL_CALL
+{
+    struct apl_hmi_panel *panel;
+    uint8_t timer_bit;
+
+    panel = &state->panel;
+    timer_bit = apl_hmi_key_bit(APL_HMI_KEY_TIMER);
+    if (0u == track->down)
+    {
+        panel->timer_editing = ((NULL != panel->send) && (0u != panel->snap_valid)
+                               && (APL_RUN_ON == panel->snap.run_state)
+                               && (APL_HMI_SETTING_TIMER == panel->setting)
+                               && (0u == locked) && (down_mask == timer_bit)
+                               && (0u == apl_hmi_panel_dark(state))) ? 1u : 0u;
+        panel->timer_repeat_ticks = 150u;
+    }
+    if (0u == panel->timer_editing)
+    {
+        return;
+    }
+    if ((0u != locked) || (down_mask != timer_bit) || (0u != (suppress & timer_bit))
+        || (APL_HMI_SETTING_TIMER != panel->setting) || (APL_RUN_ON != panel->snap.run_state))
+    {
+        panel->timer_editing = 0u;
+        track->gesture = APL_HMI_GESTURE_CONSUMED;
+        return;
+    }
+    panel->setting_ticks = APL_HMI_IDLE_TICKS;
+    if (0u != panel->timer_repeat_ticks)
+    {
+        panel->timer_repeat_ticks--;
+    }
+    if (0u == panel->timer_repeat_ticks)
+    {
+        track->gesture = APL_HMI_GESTURE_CONSUMED;
+        apl_hmi_panel_timer_key(state);
+        panel->timer_repeat_ticks = (0u == panel->setting_value) ? 200u : 50u;
+    }
+}
+
 static void apl_hmi_keys_resolve(struct apl_hmi *self,
                                  struct apl_hmi_state *state,
                                  uint8_t down_mask,
@@ -543,6 +593,10 @@ static void apl_hmi_keys_resolve(struct apl_hmi *self,
         down = (uint8_t)(0u != (down_mask & key_bit));
         if (0u != down)
         {
+            if (APL_HMI_KEY_TIMER == index)
+            {
+                apl_hmi_timer_repeat(state, track, down_mask, suppress, locked);
+            }
             if ((APL_HMI_GESTURE_OPEN == track->gesture)
                 && (0u == (suppress & key_bit))
                 && (track->down_ticks >= APL_HMI_LONG_PRESS_TICKS))
@@ -565,6 +619,10 @@ static void apl_hmi_keys_resolve(struct apl_hmi *self,
                 }
             }
 
+            if (APL_HMI_KEY_TIMER == index)
+            {
+                state->panel.timer_editing = 0u;
+            }
             track->down_ticks = 0u;
             track->gesture = APL_HMI_GESTURE_OPEN;
         }
@@ -1244,6 +1302,11 @@ static uint8_t apl_hmi_panel_dark(const struct apl_hmi_state *state) APL_CALL
            ? 1u : 0u;
 }
 
+static uint16_t apl_hmi_panel_wake_window(const struct apl_hmi_panel *panel) APL_CALL
+{
+    return (0u != panel->snap.sleep) ? APL_HMI_SLEEP_IDLE_TICKS : APL_HMI_IDLE_TICKS;
+}
+
 static uint8_t apl_hmi_humidity_next(uint8_t value, uint8_t with_off) APL_CALL
 {
     if (APL_HUMIDITY_TARGET_OFF == value)
@@ -1335,13 +1398,13 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
     if ((0u != apl_hmi_panel_dark(state))
         && !((APL_HMI_KEY_POWER == index) && (APL_FAN_GEAR_SLEEP == panel->snap.fan_gear)))
     {
-        panel->wake_ticks = APL_HMI_IDLE_TICKS;
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
         return;
     }
 
     if (0u != panel->wake_ticks)
     {
-        panel->wake_ticks = APL_HMI_IDLE_TICKS;
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
     }
 
     switch (index)
@@ -1817,8 +1880,8 @@ static void apl_hmi_panel_events(struct apl_hmi_state *state) APL_CALL
 
     if ((0u != snap->sleep) && (0u == panel->prev_sleep))
     {
-        /* 进入睡眠：3 秒无操作后熄灭状态显示。 */
-        panel->wake_ticks = APL_HMI_IDLE_TICKS;
+        /* 进入睡眠：独立5秒无操作后熄灭状态显示。 */
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
     }
 
     if ((APL_WATER_ALERT_BLINK == snap->water_alert) && (APL_WATER_ALERT_BLINK != panel->prev_alert))
@@ -1847,7 +1910,7 @@ static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL
 
     if ((0u != panel->wake_ticks) && (0u != panel->keys_down))
     {
-        panel->wake_ticks = APL_HMI_IDLE_TICKS;
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
     }
     else if (0u != panel->wake_ticks)
     {

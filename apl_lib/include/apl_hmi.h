@@ -19,8 +19,8 @@
 
 #define APL_HMI_VERSION_MAJOR   0
 #define APL_HMI_VERSION_MINOR   1
-#define APL_HMI_VERSION_PATCH   3
-#define APL_HMI_VERSION_STRING  "0.1.3"
+#define APL_HMI_VERSION_PATCH   4
+#define APL_HMI_VERSION_STRING  "0.1.4"
 #define APL_HMI_VERSION_NUM \
     ((APL_HMI_VERSION_MAJOR << 16) | (APL_HMI_VERSION_MINOR << 8) | APL_HMI_VERSION_PATCH)
 
@@ -54,6 +54,11 @@
 /** 设置、查询、唤醒后无操作多久确认或熄屏。原表 3 秒。 */
 #define APL_HMI_IDLE_MS             3000u
 #define APL_HMI_IDLE_TICKS          (APL_HMI_IDLE_MS / APL_HMI_TICK_MS)
+
+/** 睡眠无操作熄屏独立为5秒，不改变设置/查询的3秒确认。 */
+#define APL_HMI_SLEEP_IDLE_MS       5000u
+#define APL_HMI_SLEEP_IDLE_TICKS    (APL_HMI_SLEEP_IDLE_MS / APL_HMI_TICK_MS)
+
 
 /** 一体机湿度与 PM2.5 轮流显示的周期。原表 20 秒。 */
 #define APL_HMI_ROTATE_MS           20000u

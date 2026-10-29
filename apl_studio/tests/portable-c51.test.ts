@@ -24,7 +24,7 @@ function fixture(integerProbe = false) {
     }
   }
   const metadata = JSON.parse(readFileSync(join(template, 'template.json'), 'utf8'))
-  metadata.version = '0.1.3'; metadata.sourceVersion = '0.1.3'
+  metadata.version = '0.1.4'; metadata.sourceVersion = '0.1.4'
   if (integerProbe) {
     metadata.features.push({ key: 'integer_probe', name: 'Integer boundary probe', enabledByDefault: true,
       definition: { ...metadata.features[0].definition, id: 'template_integer_probe', key: 'integer_probe',
@@ -35,7 +35,7 @@ function fixture(integerProbe = false) {
     writeFileSync(join(template, 'adapter.json'), JSON.stringify(adapters))
   }
   writeFileSync(join(template, 'template.json'), JSON.stringify(metadata))
-  writeFileSync(join(template, 'source-snapshot.json'), JSON.stringify({ formatVersion: 1, templateVersion: '0.1.3', sourceVersion: '0.1.3', rootFiles: hashes }))
+  writeFileSync(join(template, 'source-snapshot.json'), JSON.stringify({ formatVersion: 1, templateVersion: '0.1.4', sourceVersion: '0.1.4', rootFiles: hashes }))
   cpSync(join(repository, 'tests/test_sdk_release.c'), join(template, 'verification/consumer.c'))
   const provider = new CSourceTemplate(template)
   return { directory, provider, close() {

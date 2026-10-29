@@ -18,7 +18,7 @@
 #endif
 
 APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000103u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000104u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
@@ -847,11 +847,17 @@ static void apl_core_second(struct apl_core *self) APL_CALL
     }
 }
 
-/** 面板定时到期：整机关机进入待机。 */
+static enum apl_link_result apl_core_cmd_power(struct apl_core *self) APL_CALL;
+
+/** 面板定时到期执行正常关机；保留通用用户定时回调的既有契约。 */
 static void apl_core_panel_timer_expire(struct apl_core *self, void *ctx) APL_CALL
 {
     APL_UNUSED_PARAM(ctx);
-    apl_core_power_off(self);
+    if (APL_RUN_ON == apl_core_get_run_state(self))
+    {
+        apl_core_beep_unless_sleep(apl_core_state_of(self), APL_BEEP_SHORT);
+        (void)apl_core_cmd_power(self);
+    }
 }
 
 void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *ctx) APL_CALL
