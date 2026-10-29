@@ -18,7 +18,7 @@
 #endif
 
 APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000201u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000202u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
@@ -968,10 +968,12 @@ static void apl_core_second(struct apl_core *self) APL_CALL
             state->filter_humidify_s++;
         }
 
-        /* 一小时存一次，避免每秒写存储。 */
+        /* 仅启用能力的累计整小时触发通知；未启用计数的零值不是整点。 */
         if ((APL_RUN_ON == state->run_state)
-            && ((0u == (state->filter_purify_s % APL_CORE_HOUR_S))
-                || (0u == (state->filter_humidify_s % APL_CORE_HOUR_S))))
+            && (((0u != apl_core_has_purify(state))
+                 && (0u == (state->filter_purify_s % APL_CORE_HOUR_S)))
+                || ((0u != apl_core_has_humidify(state))
+                    && (0u == (state->filter_humidify_s % APL_CORE_HOUR_S)))))
         {
             apl_core_memory_notify(self);
         }
