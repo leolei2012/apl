@@ -110,7 +110,7 @@ enum apl_link_command_type
     APL_LINK_CMD_FAN_CYCLE,        /**< 风速键短按：睡眠→一→二→三→自动循环 */
     APL_LINK_CMD_FAN_SET,          /**< 直接设档，arg 为 enum apl_fan_gear */
     APL_LINK_CMD_TURBO_TOGGLE,     /**< 风速键长按：进入或退出极速 */
-    APL_LINK_CMD_SLEEP_TOGGLE,     /**< 灯光键长按：进入或退出睡眠 */
+    APL_LINK_CMD_SLEEP_TOGGLE,     /**< 应用显式进入或退出睡眠；标准面板通过风速循环进入 */
     APL_LINK_CMD_TIMER_SET,        /**< 定时确认，arg 为 0～24 小时，0 取消 */
     APL_LINK_CMD_PURIFY_TOGGLE,    /**< 净化键短按：UV、负离子等净化复合功能开关 */
     APL_LINK_CMD_HUMIDIFY_TOGGLE,  /**< 湿度键短按（一体机）：加湿开关 */

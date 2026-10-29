@@ -1330,8 +1330,10 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
     panel = &state->panel;
     APL_UNUSED_PARAM(self);
 
-    /* 灯光关闭或睡眠熄屏时，第一次触摸只唤醒。 */
-    if (0u != apl_hmi_panel_dark(state))
+    /* 更改记录D23：睡眠熄屏的电源键直接执行；其他键先唤醒。
+     * 非睡眠灯光关闭仍保留既有唤醒策略，灯位冲突另行确认。 */
+    if ((0u != apl_hmi_panel_dark(state))
+        && !((APL_HMI_KEY_POWER == index) && (APL_FAN_GEAR_SLEEP == panel->snap.fan_gear)))
     {
         panel->wake_ticks = APL_HMI_IDLE_TICKS;
         return;
@@ -1379,11 +1381,8 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
         }
         break;
     case APL_HMI_KEY_LIGHT:
-        if (0u != is_long)
-        {
-            apl_hmi_panel_send(state, APL_LINK_CMD_SLEEP_TOGGLE, 0u);
-        }
-        else if (APL_RUN_ON == panel->snap.run_state)
+        /* 按键说明E11：灯光键无长按功能，睡眠经风速循环进入。 */
+        if ((0u == is_long) && (APL_RUN_ON == panel->snap.run_state))
         {
             panel->light_off = (0u == panel->light_off) ? 1u : 0u;
             panel->wake_ticks = 0u;

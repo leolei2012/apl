@@ -866,16 +866,19 @@ static void test_panel(void)
     press(&machine, &host, APL_HMI_KEY_LIGHT, SHORT_PRESS);   /* 开灯 */
     EXPECT(1u == apl_hmi_get_light(&machine.hmi));
 
-    /* 睡眠：灯光键长按；3 秒无操作熄屏。 */
+    /* 灯光长按无附加动作；睡眠由风速循环/命令进入。 */
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);
-    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
+    EXPECT(APL_FAN_GEAR_3 == apl_core_get_fan_gear(&machine.core));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
     machine_ticks(&machine, 2u);
     EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     machine_ticks(&machine, APL_HMI_IDLE_TICKS);
     EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
-    press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 唤醒 */
+    press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 只唤醒 */
     EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
-    press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 退出睡眠 */
+    press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 仍不改变模式 */
+    EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
+    EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_SLEEP_TOGGLE, 0u));
     EXPECT(APL_FAN_GEAR_3 == apl_core_get_fan_gear(&machine.core));
 
     /* 滤网重置组合键：定时 + 风速 3 秒。 */

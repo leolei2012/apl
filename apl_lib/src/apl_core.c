@@ -1297,6 +1297,11 @@ enum apl_link_result apl_core_command(struct apl_core *self,
             return APL_LINK_REJECTED;
         }
         state->humidify_on = (0u == state->humidify_on) ? 1u : 0u;
+        if ((0u != apl_core_has_purify(state)) && (APL_FAN_GEAR_TURBO == state->fan_gear))
+        {
+            /* 一体机E11：湿度键退出Turbo到Auto。恒湿目标策略保持原样。 */
+            state->fan_gear = APL_FAN_GEAR_AUTO;
+        }
         apl_core_memory_notify(self);
         return APL_LINK_OK;
     case APL_LINK_CMD_HUMIDITY_TARGET:
