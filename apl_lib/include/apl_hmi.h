@@ -73,7 +73,7 @@
 struct apl_hmi;
 
 /**
- * 键电平。宿主消抖后给出，同一拍六颗键来自同一次采样。
+ * 键电平。宿主消抖后给出，同一拍逻辑键来自同一次采样。
  * 未编入的键仍占一个字段，库丢掉它的电平。
  */
 enum apl_hmi_key_level
@@ -90,6 +90,7 @@ enum apl_hmi_key_id
     APL_HMI_KEY_LIGHT,
     APL_HMI_KEY_SPEED,
     APL_HMI_KEY_POWER,
+    APL_HMI_KEY_FILTER, /**< 仅纯净化标准面板使用；原六键编号不变。 */
     APL_HMI_KEY_COUNT
 };
 
@@ -146,6 +147,7 @@ struct apl_hmi_key_state
     enum apl_hmi_key_level light;
     enum apl_hmi_key_level speed;
     enum apl_hmi_key_level power;
+    enum apl_hmi_key_level filter;
 };
 
 /**

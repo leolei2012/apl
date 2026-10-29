@@ -186,6 +186,12 @@ static uint8_t apl_hmi_key_is_compiled(enum apl_hmi_key_id key) APL_CALL
 #else
         return 0u;
 #endif
+    case APL_HMI_KEY_FILTER:
+#if APL_HMI_COMPILE_KEY_FILTER
+        return 1u;
+#else
+        return 0u;
+#endif
     case APL_HMI_KEY_COUNT:
         return 0u;
     default:
@@ -280,6 +286,12 @@ static enum apl_hmi_key_level apl_hmi_level_at(const struct apl_hmi_key_state *k
 #else
         return APL_HMI_KEY_RELEASED;
 #endif
+    case APL_HMI_KEY_FILTER:
+#if APL_HMI_COMPILE_KEY_FILTER
+        return keys->filter;
+#else
+        return APL_HMI_KEY_RELEASED;
+#endif
     default:
         return APL_HMI_KEY_RELEASED;
     }
@@ -298,11 +310,21 @@ static uint8_t apl_hmi_lamp_forced_off(const struct apl_hmi_state *state, uint8_
         return 1u;
     }
 
+    if ((APL_HMI_KEY_FILTER == index) && (NULL != state->panel.send)
+        && ((0u == state->purify_enabled) || (0u != state->humidify_enabled)))
+    {
+        return 1u;
+    }
     return 0u;
 }
 
 static void apl_hmi_force_disabled_lamps(struct apl_hmi_state *state) APL_CALL
 {
+    if ((0u == apl_hmi_key_is_compiled(APL_HMI_KEY_FILTER))
+        || (0u != apl_hmi_lamp_forced_off(state, APL_HMI_KEY_FILTER)))
+    {
+        state->key[APL_HMI_KEY_FILTER].brightness = 0u;
+    }
     if (0u == state->purify_enabled)
     {
         state->key[APL_HMI_KEY_PURIFY].brightness = 0u;
@@ -422,7 +444,8 @@ static void apl_hmi_emit(struct apl_hmi *self,
         return;
     }
 
-    if ((0u == is_long) && (0u != apl_hmi_lamp_forced_off(state, index)))
+    if (((0u == is_long) || (APL_HMI_KEY_FILTER == index))
+        && (0u != apl_hmi_lamp_forced_off(state, index)))
     {
         return;
     }
@@ -1455,6 +1478,17 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
             /* 待机、风干时灯光键无作用。 */
         }
         break;
+    case APL_HMI_KEY_FILTER:
+        if ((0u != panel->snap.purify_enabled) && (0u == panel->snap.humidify_enabled)
+            && ((APL_RUN_ON == panel->snap.run_state) || (APL_RUN_STANDBY == panel->snap.run_state)))
+        {
+            if (0u != is_long)
+            {
+                apl_hmi_panel_send(state, APL_LINK_CMD_FILTER_RESET, 0u);
+            }
+            panel->query_ticks = APL_HMI_IDLE_TICKS;
+        }
+        break;
     case APL_HMI_KEY_HUMIDITY:
         if (0u == is_long)
         {
@@ -1478,8 +1512,15 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
 
 static void apl_hmi_panel_combo_filter(struct apl_hmi *self, void *ctx) APL_CALL
 {
+    struct apl_hmi_state *state;
+
     APL_UNUSED_PARAM(ctx);
-    apl_hmi_panel_send(apl_hmi_state_of(self), APL_LINK_CMD_FILTER_RESET, 0u);
+    state = apl_hmi_state_of(self);
+    if (0u != state->panel.snap.humidify_enabled)
+    {
+        /* 按键说明J9/J12：仅加湿/一体机使用定时+风速重置。 */
+        apl_hmi_panel_send(state, APL_LINK_CMD_FILTER_RESET, 0u);
+    }
 }
 
 static void apl_hmi_panel_combo_factory(struct apl_hmi *self, void *ctx) APL_CALL
@@ -1735,6 +1776,8 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
     snap = &panel->snap;
 
     /* 键下灯不受灯光开关影响。 */
+    state->key[APL_HMI_KEY_FILTER].brightness =
+        apl_hmi_on((0u != snap->purify_enabled) && (0u == snap->humidify_enabled));
     state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_FULL;
     state->key[APL_HMI_KEY_SPEED].brightness = APL_HMI_LAMP_FULL;
     state->key[APL_HMI_KEY_PURIFY].brightness = apl_hmi_on(snap->purify_on);
@@ -1764,8 +1807,13 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
     case APL_FAN_GEAR_AUTO:
         state->icon[APL_HMI_ICON_GEAR_AUTO] = APL_HMI_LAMP_FULL;
         break;
+    case APL_FAN_GEAR_TURBO:
+        /* 三机型极速条目：三档灯同时亮。 */
+        state->icon[APL_HMI_ICON_GEAR_1] = APL_HMI_LAMP_FULL;
+        state->icon[APL_HMI_ICON_GEAR_2] = APL_HMI_LAMP_FULL;
+        state->icon[APL_HMI_ICON_GEAR_3] = APL_HMI_LAMP_FULL;
+        break;
     default:
-        /* 极速的呈现尚未规定，档位图标全灭。 */
         break;
     }
 
@@ -1824,6 +1872,17 @@ static void apl_hmi_panel_draw(struct apl_hmi_state *state) APL_CALL
             apl_hmi_digits_text(state, ' ', 'C', 'L');
             state->digit_brightness = APL_HMI_LAMP_FULL;
         }
+        else if ((0u != panel->snap.purify_enabled) && (0u == panel->snap.humidify_enabled))
+        {
+            if (0u != panel->query_ticks)
+            {
+                apl_hmi_panel_draw_digits(state);
+            }
+            if ((0u != panel->query_ticks) || (0u != panel->red_blink_ticks))
+            {
+                apl_hmi_panel_draw_filter(state);
+            }
+        }
         break;
     }
 }
@@ -1875,7 +1934,10 @@ static void apl_hmi_panel_events(struct apl_hmi_state *state) APL_CALL
     if (APL_RUN_ON != snap->run_state)
     {
         panel->setting = APL_HMI_SETTING_NONE;
-        panel->query_ticks = 0u;
+        if ((APL_RUN_STANDBY != snap->run_state) || (APL_RUN_ON == panel->prev_run))
+        {
+            panel->query_ticks = 0u;
+        }
     }
 
     if ((0u != snap->sleep) && (0u == panel->prev_sleep))

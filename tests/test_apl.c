@@ -392,6 +392,9 @@ static void set_level(struct hmi_host *host, enum apl_hmi_key_id id, enum apl_hm
     case APL_HMI_KEY_POWER:
         host->level.power = level;
         break;
+    case APL_HMI_KEY_FILTER:
+        host->level.filter = level;
+        break;
     default:
         break;
     }

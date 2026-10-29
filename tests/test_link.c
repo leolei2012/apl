@@ -750,6 +750,8 @@ static enum apl_hmi_key_level *key_of(struct host *host, enum apl_hmi_key_id key
         return &host->keys.light;
     case APL_HMI_KEY_SPEED:
         return &host->keys.speed;
+    case APL_HMI_KEY_FILTER:
+        return &host->keys.filter;
     default:
         return &host->keys.power;
     }
@@ -889,6 +891,11 @@ static void test_panel(void)
     host.keys.timer = APL_HMI_KEY_RELEASED;
     host.keys.speed = APL_HMI_KEY_RELEASED;
     machine_ticks(&machine, 2u);
+    if (!HAS_HUMIDIFY)
+    {
+        EXPECT(0u == snap_of(&machine.core).filter_reset_seq);
+        press(&machine, &host, APL_HMI_KEY_FILTER, LONG_PRESS);
+    }
     apl_core_get_snapshot(&machine.core, &snap);
     EXPECT(1u == snap.filter_reset_seq);
     EXPECT(1u == snap.filter_reset_forced);

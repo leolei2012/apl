@@ -29,7 +29,7 @@
 /**
  * 各按键是否编入。1 编入，0 不编入。可用构建命令行 -D 覆盖。
  * 未编入的键不认短按、长按和组合，键灯读写视为非法。
- * 键编号保持不变。采样结构仍有六颗键，未编入的电平被丢弃。
+ * 键编号保持不变。采样结构保留全部逻辑键字段，未编入的电平被丢弃。
  * 与净化、加湿的运行时启用无关，也与 APL_HMI_PANEL 无关。
  */
 
@@ -85,6 +85,14 @@
 
 #if ((APL_HMI_COMPILE_KEY_POWER != 0u) && (APL_HMI_COMPILE_KEY_POWER != 1u))
 #error "APL_HMI_COMPILE_KEY_POWER 只能是 0 或 1"
+#endif
+
+/** 纯净化独立滤芯寿命键；新增字段缺省为释放，原六键编号不变。 */
+#ifndef APL_HMI_COMPILE_KEY_FILTER
+#define APL_HMI_COMPILE_KEY_FILTER      1u
+#endif
+#if ((APL_HMI_COMPILE_KEY_FILTER != 0u) && (APL_HMI_COMPILE_KEY_FILTER != 1u))
+#error "APL_HMI_COMPILE_KEY_FILTER 只能是0或1"
 #endif
 
 #endif /* APL_HMI_CONFIG_H */
