@@ -5,7 +5,7 @@ import type { SimulationControl } from '@apl-studio/model/simulation'
 /** v2 has a distinct native bridge; legacy and paused combination bridges stay unchanged. */
 export function createAdvancedAdapter(base: SimulationAdapter): SimulationAdapter {
   return {
-    supports: t => t.engine === 'apl-air-care-v1' && t.sourceVersion === '0.2.0' && t.workflow === 'air-care-standard-v2',
+    supports: t => t.engine === 'apl-air-care-v1' && ['0.2.0','0.2.1'].includes(t.sourceVersion) && t.workflow === 'air-care-standard-v2',
     sourceDirectories: ['src'], includeDirectories: ['include', 'config'],
     source: d => readFileSync(new URL('./runners/air-care-advanced.c', import.meta.url), 'utf8').replaceAll('SIM_PRODUCT', 'apl_' + d.code),
     inputCodes: { Purify: 0, Humidity: 1, Timer: 2, Light: 3, Speed: 4, Power: 5, Filter: 6,

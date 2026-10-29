@@ -876,7 +876,7 @@ static void test_panel(void)
     machine_ticks(&machine, 2u);
     EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     machine_ticks(&machine, APL_HMI_SLEEP_IDLE_TICKS);
-    EXPECT(0u == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
+    EXPECT(APL_HMI_LAMP_FULL == apl_hmi_get_icon(&machine.hmi, APL_HMI_ICON_GEAR_SLEEP));
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 只唤醒 */
     EXPECT(APL_FAN_GEAR_SLEEP == apl_core_get_fan_gear(&machine.core));
     press(&machine, &host, APL_HMI_KEY_LIGHT, LONG_PRESS);    /* 仍不改变模式 */

@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "templateVersion": "0.4.1",
+  "sourceVersion": "0.2.1",
+  "sourceCommit": "b9bc26c9fdd6d34e226905cfc38c4998c6754b6a",
+  "rootFiles": {
+    "src/apl.c": "850350d28ee852ee2a995a07b6e9fec359ab82393e5e0591034434c52c6e441b",
+    "src/apl_core.c": "f0bb1cc482f971b0056726c2a3236a9095ac1b67d19ba932aa819c196975ba6f",
+    "src/apl_hmi.c": "ca6204aae4cfedd3705c02de05b7ada903e362ab8a4cf3c556b617a2959ddfcf",
+    "include/apl.h": "26eb1258706fd9bc6d0ae01486ed76328723b767caba7c915325597748703108",
+    "include/apl_core.h": "8fff0112e89e76f5ae1dce7153f7ca14e7c636b22cecfbf0948f455a2d6d785b",
+    "include/apl_hmi.h": "d42e68265ad31ec1d697398cd85c63fa6112b81ec94aa4abc502d3f3362a76c6",
+    "include/apl_platform.h": "b31d33afbb7cd5e909bf86d38804ecedcf79c8cb191460d2d97bfd4c96752e15",
+    "include/apl_type.h": "6e19a5cb57d90a151e69fa9d4f78bdc8a1684d6e9c44fe1c313631318a79c589",
+    "config/apl_core_config.h": "bac17825f34a8b7eb711bb96df4806e1b1d09eebe741a63c2616df1d7d86917a",
+    "config/apl_hmi_config.h": "540e6f6bffa13ca8a39cc3efa20f48b65569fb2b06c2dcf98027537b8c197237"
+  },
+  "validationSource": {
+    "path": "tests/test_sdk_release.c",
+    "sha256": "cb9640f9cd792c9dcadf244229d0637dcf812bd90e1f5153dadfff587a6934da"
+  },
+  "sdkConsumer": {
+    "path": "verification/consumer.c",
+    "sha256": "5a1dd2d484bd0568faa608afe68bd6eee1f639e3829c45e315fbd1bbe0bec401",
+    "adaptation": "PM25 boundaries only when selected"
+  },
+  "previousTemplate": "0.4.0",
+  "changeScope": "Sleep indicator retained during blackout; no other lamp or unresolved policy changes"
+}
