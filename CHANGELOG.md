@@ -14,6 +14,11 @@
 
 ## [Unreleased]
 
+### APL 0.1.2 development platform compatibility
+
+- Add native-default platform types/assertions and paired C51 LARGE reentrant ABI across library methods and callbacks. Replace filter percentage intermediate uint64 arithmetic with exact bounded uint32 remainder arithmetic; preserve business rules.
+- Add platform/parameter regressions, immutable-baseline callback trace comparison, and gated portable SDK generation. Existing frozen templates and product bindings remain unchanged; the development version is not a published Studio template.
+
 ### Changed
 
 - 将APL开发库的`src/`、`include/`、`config/`整体移入`apl_lib/`，文件内容保持不变。同步测试、文档、快照冻结步骤和保留的旧构建路径；已冻结模板及SDK包内布局不变。下方历史条目的旧路径按当时布局记录。

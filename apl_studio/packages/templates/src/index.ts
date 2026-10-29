@@ -98,9 +98,28 @@ export class CSourceTemplate implements TemplateProvider {
       if (feature.defaultBinding && selected) this.replaceMacro(files, feature.defaultBinding, Number(selected.default))
     }
     for (const parameter of this.descriptor.parameters) if (parameter.binding && activeFor(parameter.requires, enabled)) this.replaceMacro(files, parameter.binding, definition.parameters.find(p => p.key === parameter.key)!.value as number | boolean)
+    const portable = files.has('include/apl_platform.h')
+    const calling = portable ? ' APL_CALL' : ''
+    const signedLiteral = (value: number) => value === -2147483648 ? '(-2147483647L - 1L)' : `${value}L`
     const prefix = 'apl_' + definition.code, type = prefix + '_t', guard = prefix.toUpperCase() + '_PRODUCT_H'
-    const header = [`/* ${comment(definition.name)} · 由 APL Studio 与源码模板生成。 */`, `#ifndef ${guard}`, `#define ${guard}`, '#include "apl.h"', '#include <stdbool.h>', '#include <stddef.h>', '#ifdef __cplusplus', 'extern "C" {', '#endif', `typedef struct apl ${type};`, `void ${prefix}_init(${type} *self, const struct apl_core_ops *core_ops, void *core_ctx, const struct apl_hmi_ops *hmi_ops, void *hmi_ctx);`, `void ${prefix}_tick(${type} *self);`, '']
-    const source = ['#include "apl_product.h"', '#include <string.h>', 'static bool send_command(struct apl *self, enum apl_link_command_type type, uint8_t arg) {', '    struct apl_link_command command = { type, arg };', '    return APL_LINK_OK == apl_core_command(&self->core, &command);', '}', '']
+    const header = [`/* ${comment(definition.name)} · 由 APL Studio 与源码模板生成。 */`, `#ifndef ${guard}`, `#define ${guard}`, '#include "apl.h"', portable ? '#include "apl_platform.h"' : '#include <stdbool.h>', '#include <stddef.h>', '#ifdef __cplusplus', 'extern "C" {', '#endif', `typedef struct apl ${type};`, `void ${prefix}_init(${type} *self, const struct apl_core_ops *core_ops, void *core_ctx, const struct apl_hmi_ops *hmi_ops, void *hmi_ctx)${calling};`, `void ${prefix}_tick(${type} *self)${calling};`, '']
+    const source = ['#include "apl_product.h"', '#include <string.h>', `static bool send_command(struct apl *self, enum apl_link_command_type type, uint8_t arg)${calling} {`, ...(portable ? ['    struct apl_link_command command;', '    command.type = type;', '    command.arg = arg;'] : ['    struct apl_link_command command = { type, arg };']), '    return APL_LINK_OK == apl_core_command(&self->core, &command);', '}', '']
+    // APL adapters begin with simple local declarations. Keep their evaluation
+    // after the existing argument guards while emitting C90 declaration order.
+    const prepareBody = (body: string) => {
+      const declarations: string[] = [], assignments: string[] = []
+      if (portable) for (;;) {
+        const match = body.match(/^\s*((?:struct|enum) \w+|uint8_t|uint16_t|uint32_t|int32_t|bool|size_t)\s+(\w+)\s*(?:=\s*([^;]+))?;/)
+        if (!match) break
+        declarations.push(`${match[1]} ${match[2]};`)
+        if (match[3]) {
+          if (match[3].trimStart().startsWith('{')) throw new Error('可移植APL适配器不能使用聚合初始化')
+          assignments.push(`${match[2]} = ${match[3]};`)
+        }
+        body = body.slice(match[0].length)
+      }
+      return { declarations, body: [...assignments, body].join(' ') }
+    }
     const initialisers: string[] = []
     for (const field of definition.functions) {
       const adapter = this.adapters[field.key], ctype = field.kind === 'bool' ? 'bool' : field.kind === 'enum' ? `enum ${prefix}_${field.key}` : 'int32_t'
@@ -109,34 +128,43 @@ export class CSourceTemplate implements TemplateProvider {
       header.push(`/* ${comment(field.name)}: ${comment(field.description)} */`)
       if (field.access !== 'write') {
         const signature = field.kind === 'string' ? `size_t ${prefix}_get_${field.key}(const ${type} *self, char *buffer, size_t capacity)` : `${ctype} ${prefix}_get_${field.key}(const ${type} *self)`
-        header.push(signature + ';')
-        source.push(signature + ' {', '    if (!self) return 0;', '    ' + expand(adapter.get!), '}', '')
+        header.push(signature + calling + ';')
+        const implementation = prepareBody(expand(adapter.get!))
+        source.push(signature + calling + ' {', ...implementation.declarations.map(line => '    ' + line), '    if (!self) return 0;', '    ' + implementation.body, '}', '')
       }
       if (field.access !== 'read') {
         const signature = `bool ${prefix}_set_${field.key}(${type} *self, ${field.kind === 'string' ? 'const char *' : ctype + ' '}value)`
-        header.push(signature + ';')
-        source.push(signature + ' {', '    if (!self) return false;')
+        header.push(signature + calling + ';')
+        const implementation = prepareBody(expand(adapter.set!))
+        source.push(signature + calling + ' {', ...implementation.declarations.map(line => '    ' + line), '    if (!self) return false;')
         if (field.kind === 'enum') source.push(`    if (${field.options.map(o => `value != ${o.value}`).join(' && ')}) return false;`)
-        if (field.kind === 'int') source.push(`    if (value < ${field.min} || value > ${field.max} || ((int64_t)value - (${field.min})) % ${field.step}) return false;`)
+        if (field.kind === 'int') source.push(portable
+          ? `    if (value < ${signedLiteral(field.min)} || value > ${signedLiteral(field.max)} || ((uint32_t)value - (uint32_t)(${signedLiteral(field.min)})) % ${field.step}UL) return false;`
+          : `    if (value < ${field.min} || value > ${field.max} || ((int64_t)value - (${field.min})) % ${field.step}) return false;`)
         if (field.kind === 'string') source.push(`    if (!value || strlen(value) > ${field.maxLength}) return false;`)
-        source.push('    ' + expand(adapter.set!), '}', '')
+        source.push('    ' + implementation.body, '}', '')
       }
       if (adapter.initialise) initialisers.push('    ' + expand(adapter.initialise))
     }
     header.push('#ifdef __cplusplus', '}', '#endif', '#endif', '')
-    source.push(`void ${prefix}_init(${type} *self, const struct apl_core_ops *core_ops, void *core_ctx, const struct apl_hmi_ops *hmi_ops, void *hmi_ctx) {`, '    if (!self) return;', '    apl_init(self, core_ops, core_ctx, hmi_ops, hmi_ctx);', '    apl_link_bind(self);', ...initialisers, '}', `void ${prefix}_tick(${type} *self) { apl_tick(self); }`, '')
+    source.push(`void ${prefix}_init(${type} *self, const struct apl_core_ops *core_ops, void *core_ctx, const struct apl_hmi_ops *hmi_ops, void *hmi_ctx)${calling} {`, '    if (!self) return;', '    apl_init(self, core_ops, core_ctx, hmi_ops, hmi_ctx);', '    apl_link_bind(self);', ...initialisers, '}', `void ${prefix}_tick(${type} *self)${calling} { apl_tick(self); }`, '')
     files.set('include/apl_product.h', bytes(header.join('\n')))
     files.set('src/apl_product.c', bytes(source.join('\n')))
-    const port = text(files.get('port/apl_port.c')!).replace('    apl_init(self, &core_ops, 0, &hmi_ops, 0);', `    ${prefix}_init(self, &core_ops, 0, &hmi_ops, 0);`).replace('    apl_link_bind(self);', '')
+    let port = text(files.get('port/apl_port.c')!).replace('    apl_init(self, &core_ops, 0, &hmi_ops, 0);', `    ${prefix}_init(self, &core_ops, 0, &hmi_ops, 0);`).replace('    apl_link_bind(self);', '')
+    if (portable) port = port
+      .replace(/^((?:static )?(?:enum \w+|\w+)\s+\**\w+\([^)]*\))(?=\r?\n\{)/gm, '$1 APL_CALL')
+      .replace(/\(void\)(\w+);/g, 'APL_UNUSED_PARAM($1);')
     files.set('port/apl_port.c', bytes(port))
-    files.set('port/apl_port.h', bytes(text(files.get('port/apl_port.h')!).replace('#include "apl.h"', '#include "apl_product.h"')))
+    let portHeader = text(files.get('port/apl_port.h')!).replace('#include "apl.h"', '#include "apl_product.h"')
+    if (portable) portHeader = portHeader.replace('void apl_port_init(struct apl *self);', 'void apl_port_init(struct apl *self) APL_CALL;')
+    files.set('port/apl_port.h', bytes(portHeader))
     files.set('product.apl.json', bytes(JSON.stringify(definition, null, 2) + '\n'))
     files.set('metadata/template.json', bytes(JSON.stringify(this.descriptor, null, 2) + '\n'))
     const consumer = safeRelative(this.descriptor.verification?.consumer ?? 'verification/smoke.c')
     if (consumer === 'verification/smoke.c') files.set(consumer, bytes(this.smoke(definition)))
     else if (!files.has(consumer)) throw new Error('模板缺少声明的消费验证程序：' + consumer)
     else files.set(consumer, bytes('#include "apl_product.h"\n' + this.configurationAssertions(definition).join('\n') + '\n' + text(files.get(consumer)!)))
-    files.set('README.md', bytes(this.readme(definition)))
+    files.set('README.md', bytes(this.readme(definition, portable)))
     files.set('CMakeLists.txt', bytes(text(files.get('CMakeLists.txt')!) + `\ninclude(CTest)\nif(BUILD_TESTING)\n  add_executable(apl_sdk_smoke ${consumer})\n  target_link_libraries(apl_sdk_smoke PRIVATE apl)\n  add_test(NAME apl_sdk_smoke COMMAND apl_sdk_smoke)\nendif()\n`))
     return files
   }
@@ -157,10 +185,10 @@ export class CSourceTemplate implements TemplateProvider {
     const fan = definition.functions.find(f => f.key === 'fan_speed')!.default
     return `#include "apl_product.h"\n#include <assert.h>\n#include <stdio.h>\n${assertions.join('\n')}\nstatic int fan_on;\nstatic enum apl_water_level water(void *ctx) { (void)ctx; return APL_WATER_LEVEL_3; }\nstatic uint16_t pm(void *ctx) { (void)ctx; return 12u; }\nstatic uint8_t humidity(void *ctx) { (void)ctx; return 45u; }\nstatic uint8_t interlock(void *ctx) { (void)ctx; return 1u; }\nstatic void fan(enum apl_switch on, enum apl_fan_gear gear, void *ctx) { (void)gear; (void)ctx; fan_on = on == APL_SWITCH_ON; }\nint main(void) {\n  ${prefix}_t self;\n  static struct apl_core_ops ops;\n  struct apl_link_snapshot s;\n  ops.get_water_level=water; ops.get_pm25=pm; ops.get_humidity=humidity; ops.get_uv_interlock=interlock; ops.set_fan=fan;\n  ${prefix}_init(&self,&ops,0,0,0);\n  assert(${prefix}_set_power(&self,true));\n  for (unsigned i=0;i<201u;i++) ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  assert(s.run_state == APL_RUN_ON && fan_on);\n  assert(s.purify_enabled == ${Number(enabled.has('purify'))} && s.humidify_enabled == ${Number(enabled.has('humidify'))});\n  assert((int)${prefix}_get_fan_speed(&self) == ${Number(fan)});\n  ${enabled.has('pm25') ? `assert(${prefix}_get_pm25(&self) == 12);` : ''}\n  ${enabled.has('humidity') ? `assert(${prefix}_get_humidity(&self) == 45);` : ''}\n  assert(${prefix}_set_power(&self,false));\n  ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  ${enabled.has('humidify') ? `assert(s.run_state == APL_RUN_DRY && s.dry_left_s > 0u);\n  assert(${prefix}_set_power(&self,true));\n  ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  assert(s.run_state == APL_RUN_ON && s.dry_left_s == 0u);` : 'assert(s.run_state == APL_RUN_STANDBY);'}\n  puts("APL SDK configuration, power, fan and dry recovery verified");\n  return 0;\n}\n`
   }
-  private readme(definition: Definition): string {
+  private readme(definition: Definition, portable = false): string {
     const prefix = 'apl_' + definition.code, enabled = new Set(definition.functions.map(f => f.key))
     const ports = this.descriptor.ports.filter(p => activeFor(p.requires, enabled))
-    return `# ${comment(definition.name)} · APL C11 SDK\n\n产品目标版本 ${definition.sdkVersion}；模板 ${this.descriptor.id}@${this.descriptor.version}；APL ${this.descriptor.sourceVersion}。\n\n## 接入\n\n1. 将 src 下全部 C 文件加入工程，包含目录加入 include、config。\n2. 复制 port 到自己的应用目录，完成 TODO 硬件实现；升级时保留自己的移植代码。占位回调不是真实驱动。\n3. 使用方持有 ${prefix}_t 对象，调用 apl_port_init 或 ${prefix}_init；ops 和 ctx 必须在实例存活期间有效。\n4. 每 10 ms 串行调用 ${prefix}_tick；读写接口见 include/apl_product.h。所有操作不能重入。\n5. 读取 HMI getter 刷新实际面板。power getter 表示正常运行；风干时返回 false，实际运行态从 apl_core_get_snapshot 读取。\n6. 需要记忆时实现 memory_save，并在初始化后、第一拍前显式恢复带版本与校验的记录。\n\n## 本产品移植接口\n\n${ports.map(p => `- ${p.key}（${p.required ? '必需' : '可选'}）：${p.description}`).join('\n')}\n\n## 配置\n\n${definition.parameters.map(p => `- ${p.key} = ${String(p.value)}`).join('\n')}\n\n只读传感器功能的 default 仅用于 Studio 数据模型预览，实际值始终来自硬件回调。UI 的通用接口契约预览不是本 SDK 的 ABI；本包 include/apl_product.h 是带显式实例参数、已编译验证的实际接口。\n\n## 验证与升级\n\nmanifest.json 记录产品修订、模板和源码指纹、逐文件 SHA-256 及实际编译/消费验证结果。\n通用构建：cmake -S . -B build，然后 cmake --build build，再 ctest --test-dir build。交叉编译可关闭 BUILD_TESTING。\n验证仅覆盖本机 C11 配置与基础业务消费，不等于已完成目标 MCU、外设电气或完整产品验收。\n重新生成只产生新归档，不修改用户嵌入式工程。\n`
+    return `# ${comment(definition.name)} · ${portable ? 'APL 源码 SDK' : 'APL C11 SDK'}\n\n产品目标版本 ${definition.sdkVersion}；模板 ${this.descriptor.id}@${this.descriptor.version}；APL ${this.descriptor.sourceVersion}。\n\n## 接入\n\n1. 将 src 下全部 C 文件加入工程，包含目录加入 include、config。\n2. 复制 port 到自己的应用目录，完成 TODO 硬件实现；升级时保留自己的移植代码。占位回调不是真实驱动。\n3. 使用方持有 ${prefix}_t 对象，调用 apl_port_init 或 ${prefix}_init；ops 和 ctx 必须在实例存活期间有效。\n4. 每 10 ms 串行调用 ${prefix}_tick；读写接口见 include/apl_product.h。所有操作不能重入。\n5. 读取 HMI getter 刷新实际面板。power getter 表示正常运行；风干时返回 false，实际运行态从 apl_core_get_snapshot 读取。\n6. 需要记忆时实现 memory_save，并在初始化后、第一拍前显式恢复带版本与校验的记录。\n\n## 本产品移植接口\n\n${ports.map(p => `- ${p.key}（${p.required ? '必需' : '可选'}）：${p.description}`).join('\n')}\n\n## 配置\n\n${definition.parameters.map(p => `- ${p.key} = ${String(p.value)}`).join('\n')}\n\n只读传感器功能的 default 仅用于 Studio 数据模型预览，实际值始终来自硬件回调。UI 的通用接口契约预览不是本 SDK 的 ABI；本包 include/apl_product.h 是带显式实例参数、已编译验证的实际接口。\n\n## 验证与升级\n\nmanifest.json 记录产品修订、模板和源码指纹、逐文件 SHA-256 及实际编译/消费验证结果。\n通用构建：cmake -S . -B build，然后 cmake --build build，再 ctest --test-dir build。交叉编译可关闭 BUILD_TESTING。\n验证仅覆盖本机 C11 配置与基础业务消费，不等于已完成目标 MCU、外设电气或完整产品验收。\n重新生成只产生新归档，不修改用户嵌入式工程。\n${portable ? '\n## 平台调用约定\n\napl_platform.h在主机保持C11类型/调用ABI，Keil C51使用LARGE reentrant软件栈。所有回调定义必须与公开声明一致使用APL_CALL；不能强转不匹配的函数指针。C51在进入任何APL方法前必须由工程初始化软件栈并保留不与静态XDATA重叠的空间。公开对象、枚举和memory结构体布局不保证跨架构二进制兼容，存储和通信应逐字段编码并带版本/校验。不能从本机消费通过推断MCU资源、栈、时序或实机通过。\n' : ''}`
   }
 }
 export class TemplateRegistry {

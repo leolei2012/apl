@@ -12,15 +12,15 @@
 #ifndef APL_HMI_H
 #define APL_HMI_H
 
-#include <stdint.h>
+#include "apl_platform.h"
 
 #include "apl_hmi_config.h"
 #include "apl_type.h"
 
 #define APL_HMI_VERSION_MAJOR   0
 #define APL_HMI_VERSION_MINOR   1
-#define APL_HMI_VERSION_PATCH   1
-#define APL_HMI_VERSION_STRING  "0.1.1"
+#define APL_HMI_VERSION_PATCH   2
+#define APL_HMI_VERSION_STRING  "0.1.2"
 #define APL_HMI_VERSION_NUM \
     ((APL_HMI_VERSION_MAJOR << 16) | (APL_HMI_VERSION_MINOR << 8) | APL_HMI_VERSION_PATCH)
 
@@ -149,10 +149,10 @@ struct apl_hmi_key_state
  */
 struct apl_hmi_ops
 {
-    void (*get_key_state)(struct apl_hmi_key_state *state, void *ctx);
-    void (*set_buzzer)(uint8_t on, void *ctx);  /**< 1 响，0 停。空则不发声 */
+    void (*get_key_state)(struct apl_hmi_key_state *state, void *ctx) APL_CALL;
+    void (*set_buzzer)(uint8_t on, void *ctx) APL_CALL;  /**< 1 响，0 停。空则不发声 */
     /** 已通过功能启用、童锁检查的单键手势通知；只观察，不执行控制。ops 应清零初始化。 */
-    void (*key_event)(enum apl_hmi_key_id key, uint8_t is_long, void *ctx);
+    void (*key_event)(enum apl_hmi_key_id key, uint8_t is_long, void *ctx) APL_CALL;
 };
 
 
@@ -162,8 +162,8 @@ struct apl_hmi
     union
     {
         void *align_ptr;
-        void (*align_fn)(void);
-        long long align_ll;
+        void (*align_fn)(void) APL_CALL;
+        APL_ALIGN_INTEGER align_ll;
         double align_d;
         unsigned char bytes[APL_HMI_OPAQUE_SIZE];
     } storage;
@@ -180,7 +180,7 @@ struct apl_hmi
  * 上电后已编入的键灯、氛围灯、四段水位灯和三位数字管全亮，
  * 数字为 888。APL_HMI_POWERUP_LAMP_TICKS 拍之后这些灯熄灭，电源键半亮。
  */
-void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx);
+void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx) APL_CALL;
 
 /**
  * @brief 推进一拍，认出短按、长按和组合键
@@ -191,7 +191,7 @@ void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx
  * 回调里只通知使用方，库不判断业务。
  * 不要在回调里再调用 apl_hmi_tick。
  */
-void apl_hmi_tick(struct apl_hmi *self);
+void apl_hmi_tick(struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 上电全灯是否还在亮
@@ -200,7 +200,7 @@ void apl_hmi_tick(struct apl_hmi *self);
  *
  * 为 1 时，本拍会重新写成全亮。使用方这时不要再用 setter 覆盖这些灯。
  */
-uint8_t apl_hmi_get_powerup_lamp(const struct apl_hmi *self);
+uint8_t apl_hmi_get_powerup_lamp(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入一颗键灯的亮度
@@ -210,7 +210,7 @@ uint8_t apl_hmi_get_powerup_lamp(const struct apl_hmi *self);
  *
  * 净化或加湿未启用时，对应键灯在这里立即记成 0。随后的 tick 也会保持为 0。
  */
-void apl_hmi_set_key_lamp(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t brightness);
+void apl_hmi_set_key_lamp(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t brightness) APL_CALL;
 
 /**
  * @brief 读取一颗键灯的亮度
@@ -218,7 +218,7 @@ void apl_hmi_set_key_lamp(struct apl_hmi *self, enum apl_hmi_key_id key, uint8_t
  * @param key 键编号
  * @return 亮度。self 为空、key 非法或该键未编入时返回 0
  */
-uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key);
+uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key) APL_CALL;
 
 /**
  * @brief 同时绑定一颗键的短按、长按和 ctx
@@ -232,23 +232,23 @@ uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key
  */
 void apl_hmi_set_key_callback(struct apl_hmi *self,
                               enum apl_hmi_key_id key,
-                              void (*on_short)(struct apl_hmi *self, void *ctx),
-                              void (*on_long)(struct apl_hmi *self, void *ctx),
-                              void *ctx);
+                              void (*on_short)(struct apl_hmi *self, void *ctx) APL_CALL,
+                              void (*on_long)(struct apl_hmi *self, void *ctx) APL_CALL,
+                              void *ctx) APL_CALL;
 
 /**
  * @brief 写入氛围灯亮度
  * @param self 人机对象
  * @param brightness 亮度。0 为灭。取值范围尚未规定，库不夹取值
  */
-void apl_hmi_set_ambient_brightness(struct apl_hmi *self, uint8_t brightness);
+void apl_hmi_set_ambient_brightness(struct apl_hmi *self, uint8_t brightness) APL_CALL;
 
 /**
  * @brief 读取氛围灯亮度
  * @param self 人机对象
  * @return 亮度。self 为空时返回 0
  */
-uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self);
+uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入氛围灯颜色
@@ -262,7 +262,7 @@ uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self);
 void apl_hmi_set_ambient_color(struct apl_hmi *self,
                                uint8_t red,
                                uint8_t green,
-                               uint8_t blue);
+                               uint8_t blue) APL_CALL;
 
 /**
  * @brief 读取氛围灯颜色
@@ -274,7 +274,7 @@ void apl_hmi_set_ambient_color(struct apl_hmi *self,
 void apl_hmi_get_ambient_color(const struct apl_hmi *self,
                                uint8_t *red,
                                uint8_t *green,
-                               uint8_t *blue);
+                               uint8_t *blue) APL_CALL;
 
 /**
  * @brief 写入一段水位灯的亮度
@@ -282,7 +282,7 @@ void apl_hmi_get_ambient_color(const struct apl_hmi *self,
  * @param index 段号，从 1 到 APL_HMI_WATER_LAMP_COUNT。其他值不改变任何灯
  * @param brightness 亮度。0 为灭。取值范围尚未规定，库不夹取值
  */
-void apl_hmi_set_water_lamp(struct apl_hmi *self, uint8_t index, uint8_t brightness);
+void apl_hmi_set_water_lamp(struct apl_hmi *self, uint8_t index, uint8_t brightness) APL_CALL;
 
 /**
  * @brief 读取一段水位灯的亮度
@@ -290,21 +290,21 @@ void apl_hmi_set_water_lamp(struct apl_hmi *self, uint8_t index, uint8_t brightn
  * @param index 段号，从 1 到 APL_HMI_WATER_LAMP_COUNT
  * @return 亮度。self 为空或段号非法时返回 0
  */
-uint8_t apl_hmi_get_water_lamp(const struct apl_hmi *self, uint8_t index);
+uint8_t apl_hmi_get_water_lamp(const struct apl_hmi *self, uint8_t index) APL_CALL;
 
 /**
  * @brief 写入数码管亮度
  * @param self 人机对象
  * @param brightness 亮度。0 为灭。取值范围尚未规定，库不夹取值
  */
-void apl_hmi_set_digits_brightness(struct apl_hmi *self, uint8_t brightness);
+void apl_hmi_set_digits_brightness(struct apl_hmi *self, uint8_t brightness) APL_CALL;
 
 /**
  * @brief 读取数码管亮度
  * @param self 人机对象
  * @return 亮度。self 为空时返回 0
  */
-uint8_t apl_hmi_get_digits_brightness(const struct apl_hmi *self);
+uint8_t apl_hmi_get_digits_brightness(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入数码管三位内容
@@ -312,7 +312,7 @@ uint8_t apl_hmi_get_digits_brightness(const struct apl_hmi *self);
  * @param content 恰好 APL_HMI_DIGIT_COUNT 个字符。不要求以 '\\0' 结尾。空指针则不改
  */
 void apl_hmi_set_digits_content(struct apl_hmi *self,
-                                const char content[APL_HMI_DIGIT_COUNT]);
+                                const char content[APL_HMI_DIGIT_COUNT]) APL_CALL;
 
 /**
  * @brief 读取数码管三位内容
@@ -320,21 +320,21 @@ void apl_hmi_set_digits_content(struct apl_hmi *self,
  * @param content 至少 APL_HMI_DIGIT_COUNT 个字符的缓冲区。空指针则不写
  */
 void apl_hmi_get_digits_content(const struct apl_hmi *self,
-                                char content[APL_HMI_DIGIT_COUNT]);
+                                char content[APL_HMI_DIGIT_COUNT]) APL_CALL;
 
 /**
  * @brief 写入数码管单位
  * @param self 人机对象
  * @param unit 上表中的一个单位。其他值不改变当前单位
  */
-void apl_hmi_set_digits_unit(struct apl_hmi *self, enum apl_hmi_unit unit);
+void apl_hmi_set_digits_unit(struct apl_hmi *self, enum apl_hmi_unit unit) APL_CALL;
 
 /**
  * @brief 读取数码管单位
  * @param self 人机对象
  * @return 当前单位。self 为空时返回 APL_HMI_UNIT_NONE
  */
-enum apl_hmi_unit apl_hmi_get_digits_unit(const struct apl_hmi *self);
+enum apl_hmi_unit apl_hmi_get_digits_unit(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入童锁
@@ -343,14 +343,14 @@ enum apl_hmi_unit apl_hmi_get_digits_unit(const struct apl_hmi *self);
  *
  * 本拍开始时已经采样的童锁，要等下一拍才挡住其余手势。
  */
-void apl_hmi_set_child_lock(struct apl_hmi *self, enum apl_hmi_child_lock lock);
+void apl_hmi_set_child_lock(struct apl_hmi *self, enum apl_hmi_child_lock lock) APL_CALL;
 
 /**
  * @brief 读取童锁
  * @param self 人机对象
  * @return 当前童锁。self 为空时返回 APL_HMI_CHILD_LOCK_OFF
  */
-enum apl_hmi_child_lock apl_hmi_get_child_lock(const struct apl_hmi *self);
+enum apl_hmi_child_lock apl_hmi_get_child_lock(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入净化键是否启用
@@ -360,14 +360,14 @@ enum apl_hmi_child_lock apl_hmi_get_child_lock(const struct apl_hmi *self);
  * 使用方按主控快照写入。0 时不发净化键短按，并把该键灯亮度保持为 0。
  * 长按是否同样限制尚未规定，因此仍会发出。
  */
-void apl_hmi_set_purify_enabled(struct apl_hmi *self, uint8_t enabled);
+void apl_hmi_set_purify_enabled(struct apl_hmi *self, uint8_t enabled) APL_CALL;
 
 /**
  * @brief 读取净化键是否启用
  * @param self 人机对象
  * @return 1 启用，0 未启用。self 为空时返回 0
  */
-uint8_t apl_hmi_get_purify_enabled(const struct apl_hmi *self);
+uint8_t apl_hmi_get_purify_enabled(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 写入加湿键是否启用
@@ -377,14 +377,14 @@ uint8_t apl_hmi_get_purify_enabled(const struct apl_hmi *self);
  * 使用方按主控快照写入。0 时不发加湿键短按，并把该键灯亮度保持为 0。
  * 长按是否同样限制尚未规定，因此仍会发出。
  */
-void apl_hmi_set_humidify_enabled(struct apl_hmi *self, uint8_t enabled);
+void apl_hmi_set_humidify_enabled(struct apl_hmi *self, uint8_t enabled) APL_CALL;
 
 /**
  * @brief 读取加湿键是否启用
  * @param self 人机对象
  * @return 1 启用，0 未启用。self 为空时返回 0
  */
-uint8_t apl_hmi_get_humidify_enabled(const struct apl_hmi *self);
+uint8_t apl_hmi_get_humidify_enabled(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 登记一组组合键
@@ -404,8 +404,8 @@ int apl_hmi_set_combo(struct apl_hmi *self,
                       const enum apl_hmi_key_id *keys,
                       uint8_t key_count,
                       uint16_t hold_ms,
-                      void (*on_combo)(struct apl_hmi *self, void *ctx),
-                      void *ctx);
+                      void (*on_combo)(struct apl_hmi *self, void *ctx) APL_CALL,
+                      void *ctx) APL_CALL;
 
 
 /**
@@ -414,7 +414,7 @@ int apl_hmi_set_combo(struct apl_hmi *self,
  * @param icon 图标编号。表外不改
  * @param brightness 亮度。0 为灭
  */
-void apl_hmi_set_icon(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brightness);
+void apl_hmi_set_icon(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brightness) APL_CALL;
 
 /**
  * @brief 读取一个状态图标的亮度
@@ -422,21 +422,21 @@ void apl_hmi_set_icon(struct apl_hmi *self, enum apl_hmi_icon icon, uint8_t brig
  * @param icon 图标编号
  * @return 亮度。self 为空或编号非法时返回 0
  */
-uint8_t apl_hmi_get_icon(const struct apl_hmi *self, enum apl_hmi_icon icon);
+uint8_t apl_hmi_get_icon(const struct apl_hmi *self, enum apl_hmi_icon icon) APL_CALL;
 
 /**
  * @brief 写入水位灯颜色
  * @param self 人机对象
  * @param color 绿或橙。其他值不改
  */
-void apl_hmi_set_water_color(struct apl_hmi *self, enum apl_hmi_water_color color);
+void apl_hmi_set_water_color(struct apl_hmi *self, enum apl_hmi_water_color color) APL_CALL;
 
 /**
  * @brief 读取水位灯颜色
  * @param self 人机对象
  * @return 当前颜色。self 为空时返回 APL_HMI_WATER_GREEN
  */
-enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self);
+enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 播放一段提示音
@@ -447,14 +447,14 @@ enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self);
  *
  * 由 apl_hmi_tick 推进，经 ops 的 set_buzzer 开关蜂鸣器。新的一段打断旧的。
  */
-void apl_hmi_buzzer_play(struct apl_hmi *self, uint8_t count, uint16_t on_ms, uint16_t off_ms);
+void apl_hmi_buzzer_play(struct apl_hmi *self, uint8_t count, uint16_t on_ms, uint16_t off_ms) APL_CALL;
 
 /**
  * @brief 提示音是否还在播放
  * @param self 人机对象
  * @return 1 在播放。self 为空时返回 0
  */
-uint8_t apl_hmi_get_buzzer_busy(const struct apl_hmi *self);
+uint8_t apl_hmi_get_buzzer_busy(const struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 接上面板逻辑：按键形成 link_command，显示按 link_snapshot 绘制
@@ -469,8 +469,8 @@ uint8_t apl_hmi_get_buzzer_busy(const struct apl_hmi *self);
  */
 void apl_hmi_link_bind(struct apl_hmi *self,
                        enum apl_link_result (*send)(const struct apl_link_command *command,
-                                                    void *ctx),
-                       void *ctx);
+                                                    void *ctx) APL_CALL,
+                       void *ctx) APL_CALL;
 
 /**
  * @brief 交入主控的最新快照
@@ -479,7 +479,7 @@ void apl_hmi_link_bind(struct apl_hmi *self,
  *
  * 未接上面板逻辑时只记下，不绘制。接上后同时按快照写入净化、加湿启用标志。
  */
-void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *snapshot);
+void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *snapshot) APL_CALL;
 
 /**
  * @brief 显示滤芯剩余寿命 3 秒
@@ -487,13 +487,13 @@ void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *
  *
  * 只查询，不改主控状态。当前面板没有单独的滤芯寿命键，由使用方决定入口。
  */
-void apl_hmi_filter_query(struct apl_hmi *self);
+void apl_hmi_filter_query(struct apl_hmi *self) APL_CALL;
 
 /**
  * @brief 面板灯光是否开着
  * @param self 人机对象
  * @return 1 开，0 关。self 为空时返回 0
  */
-uint8_t apl_hmi_get_light(const struct apl_hmi *self);
+uint8_t apl_hmi_get_light(const struct apl_hmi *self) APL_CALL;
 
 #endif /* APL_HMI_H */

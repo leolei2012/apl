@@ -16,8 +16,8 @@
 
 #define APL_VERSION_MAJOR   0
 #define APL_VERSION_MINOR   1
-#define APL_VERSION_PATCH   1
-#define APL_VERSION_STRING  "0.1.1"
+#define APL_VERSION_PATCH   2
+#define APL_VERSION_STRING  "0.1.2"
 #define APL_VERSION_NUM \
     ((APL_VERSION_MAJOR << 16) | (APL_VERSION_MINOR << 8) | APL_VERSION_PATCH)
 
@@ -40,7 +40,7 @@ void apl_init(struct apl *self,
               const struct apl_core_ops *core_ops,
               void *core_ctx,
               const struct apl_hmi_ops *hmi_ops,
-              void *hmi_ctx);
+              void *hmi_ctx) APL_CALL;
 
 /**
  * @brief 推进一拍
@@ -49,7 +49,7 @@ void apl_init(struct apl *self,
  * 使用方每 APL_CORE_TICK_MS 调用一次。顺序是 apl_core_tick，取主控快照交给人机，
  * 然后 apl_hmi_tick。未调用 apl_link_bind 时，显示映射仍由使用方用 getter 和 setter 完成。
  */
-void apl_tick(struct apl *self);
+void apl_tick(struct apl *self) APL_CALL;
 
 /**
  * @brief 把人机的操作接到主控，并让人机按快照绘制
@@ -57,6 +57,6 @@ void apl_tick(struct apl *self);
  *
  * 接上后六颗键不再调用使用方的键回调，见 apl_hmi_link_bind。
  */
-void apl_link_bind(struct apl *self);
+void apl_link_bind(struct apl *self) APL_CALL;
 
 #endif /* APL_H */

@@ -17,8 +17,8 @@
 #define APL_CORE_MAY_ALIAS
 #endif
 
-_Static_assert(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-_Static_assert(APL_CORE_VERSION_NUM == 0x000101u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000102u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
@@ -41,7 +41,7 @@ struct APL_CORE_MAY_ALIAS apl_core_state
 {
     const struct apl_core_ops *ops;
     void *ctx;
-    void (*on_timer)(struct apl_core *self, void *ctx);
+    void (*on_timer)(struct apl_core *self, void *ctx) APL_CALL;
     void *timer_ctx;
     enum apl_power power;
     enum apl_run_state run_state;
@@ -91,43 +91,43 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint8_t filter_reset_forced;
 };
 
-_Static_assert(sizeof(struct apl_core_state) <= sizeof(struct apl_core),
+APL_STATIC_ASSERT(sizeof(struct apl_core_state) <= sizeof(struct apl_core),
                "APL_CORE_OPAQUE_SIZE 小于对象状态");
-_Static_assert(_Alignof(struct apl_core_state) <= _Alignof(struct apl_core),
+APL_STATIC_ASSERT(APL_ALIGNOF(struct apl_core_state) <= APL_ALIGNOF(struct apl_core),
                "占位对象的对齐小于对象状态");
 
-static struct apl_core_state *apl_core_state_of(struct apl_core *self)
+static struct apl_core_state *apl_core_state_of(struct apl_core *self) APL_CALL
 {
     return (struct apl_core_state *)(void *)self->storage.bytes;
 }
 
-static const struct apl_core_state *apl_core_state_of_const(const struct apl_core *self)
+static const struct apl_core_state *apl_core_state_of_const(const struct apl_core *self) APL_CALL
 {
     return (const struct apl_core_state *)(const void *)self->storage.bytes;
 }
 
-static uint8_t apl_core_has_purify(const struct apl_core_state *state)
+static uint8_t apl_core_has_purify(const struct apl_core_state *state) APL_CALL
 {
 #if APL_COMPILE_PURIFY
     return state->purify_enabled;
 #else
-    (void)state;
+    APL_UNUSED_PARAM(state);
     return 0u;
 #endif
 }
 
-static uint8_t apl_core_has_humidify(const struct apl_core_state *state)
+static uint8_t apl_core_has_humidify(const struct apl_core_state *state) APL_CALL
 {
 #if APL_COMPILE_HUMIDIFY
     return state->humidify_enabled;
 #else
-    (void)state;
+    APL_UNUSED_PARAM(state);
     return 0u;
 #endif
 }
 
 /** 定时被关机或重新设定打断时，旧回调不能再响。 */
-static void apl_core_timer_clear(struct apl_core_state *state)
+static void apl_core_timer_clear(struct apl_core_state *state) APL_CALL
 {
     state->timer_left_s = 0u;
     state->timer_subtick = 0u;
@@ -135,7 +135,7 @@ static void apl_core_timer_clear(struct apl_core_state *state)
     state->timer_ctx = NULL;
 }
 
-static uint8_t apl_core_gear_is_valid(enum apl_fan_gear gear)
+static uint8_t apl_core_gear_is_valid(enum apl_fan_gear gear) APL_CALL
 {
     switch (gear)
     {
@@ -151,7 +151,7 @@ static uint8_t apl_core_gear_is_valid(enum apl_fan_gear gear)
     }
 }
 
-static uint8_t apl_core_water_is_valid(enum apl_water_level level)
+static uint8_t apl_core_water_is_valid(enum apl_water_level level) APL_CALL
 {
     switch (level)
     {
@@ -166,14 +166,14 @@ static uint8_t apl_core_water_is_valid(enum apl_water_level level)
     }
 }
 
-static void apl_core_beep(struct apl_core_state *state, enum apl_beep beep)
+static void apl_core_beep(struct apl_core_state *state, enum apl_beep beep) APL_CALL
 {
     state->beep = beep;
     state->beep_seq++;
 }
 
 /** 睡眠静音时不发提示音。原表：蜂鸣按睡眠静音规则执行。 */
-static void apl_core_beep_unless_sleep(struct apl_core_state *state, enum apl_beep beep)
+static void apl_core_beep_unless_sleep(struct apl_core_state *state, enum apl_beep beep) APL_CALL
 {
     if ((APL_RUN_ON == state->run_state) && (APL_FAN_GEAR_SLEEP == state->fan_gear))
     {
@@ -184,7 +184,7 @@ static void apl_core_beep_unless_sleep(struct apl_core_state *state, enum apl_be
 }
 
 static void apl_core_memory_fill(const struct apl_core_state *state,
-                                 struct apl_core_memory *memory)
+                                 struct apl_core_memory *memory) APL_CALL
 {
     memset(memory, 0, sizeof(*memory));
     if (APL_RUN_FACTORY == state->run_state)
@@ -206,7 +206,7 @@ static void apl_core_memory_fill(const struct apl_core_state *state,
     memory->factory_pending = state->factory_pending;
 }
 
-static void apl_core_memory_notify(struct apl_core *self)
+static void apl_core_memory_notify(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
     struct apl_core_memory memory;
@@ -221,25 +221,46 @@ static void apl_core_memory_notify(struct apl_core *self)
     state->ops->memory_save(&memory, state->ctx);
 }
 
-static uint8_t apl_core_filter_left(uint32_t used_s)
+static uint8_t apl_core_filter_left(uint32_t used_s) APL_CALL
 {
-    uint64_t left;
+    uint32_t remaining;
+    uint32_t gap;
+    uint32_t remainder = 0u;
+    uint8_t quotient = 0u;
+    uint8_t index;
 
     if (used_s >= APL_CORE_FILTER_LIFE_S)
     {
         return (uint8_t)APL_FILTER_EXPIRED;
     }
 
-    /* 向上取整：刚开始用是 99，最后一秒前仍是 1，到期才是 0。 */
-    left = ((uint64_t)(APL_CORE_FILTER_LIFE_S - used_s) * APL_CORE_FILTER_LEFT_MAX
-            + APL_CORE_FILTER_LIFE_S - 1u) / APL_CORE_FILTER_LIFE_S;
-    return (uint8_t)left;
+    remaining = APL_CORE_FILTER_LIFE_S - used_s;
+    gap = used_s;
+    /** Exact ceil(remaining * 99 / life), with no overflowing 32-bit product.
+     * In both branches remainder stays below life, even at maximum lifetime. */
+    for (index = 0u; index < APL_CORE_FILTER_LEFT_MAX; index++)
+    {
+        if (remainder >= gap)
+        {
+            remainder -= gap;
+            quotient++;
+        }
+        else
+        {
+            remainder += remaining;
+        }
+    }
+    if (remainder != 0u)
+    {
+        quotient++;
+    }
+    return quotient;
 }
 
 static enum apl_aq_level apl_core_aq_grade(uint16_t value,
                                            uint16_t excellent,
                                            uint16_t good,
-                                           uint16_t moderate)
+                                           uint16_t moderate) APL_CALL
 {
     if (value <= excellent)
     {
@@ -259,7 +280,7 @@ static enum apl_aq_level apl_core_aq_grade(uint16_t value,
     return APL_AQ_SEVERE;
 }
 
-static enum apl_aq_level apl_core_aq_worse(enum apl_aq_level a, enum apl_aq_level b)
+static enum apl_aq_level apl_core_aq_worse(enum apl_aq_level a, enum apl_aq_level b) APL_CALL
 {
     return (b > a) ? b : a;
 }
@@ -268,7 +289,7 @@ static enum apl_aq_level apl_core_aq_worse(enum apl_aq_level a, enum apl_aq_leve
  * 原表多传感器分级。区间端点归较好的一档（待确认：TVOC 0.3、0.5 两档重叠）。
  * 甲醛没有「良」，0.050 以上直接是中度污染。
  */
-static void apl_core_sensor_sample(struct apl_core_state *state)
+static void apl_core_sensor_sample(struct apl_core_state *state) APL_CALL
 {
     enum apl_aq_level level;
 
@@ -318,7 +339,7 @@ static void apl_core_sensor_sample(struct apl_core_state *state)
 }
 
 /** 恒湿风速表。差值 = 设定 − 实际；达到或超过设定仍是一档。 */
-static enum apl_fan_gear apl_core_humidity_gear(const struct apl_core_state *state)
+static enum apl_fan_gear apl_core_humidity_gear(const struct apl_core_state *state) APL_CALL
 {
     int16_t diff;
 
@@ -337,7 +358,7 @@ static enum apl_fan_gear apl_core_humidity_gear(const struct apl_core_state *sta
 }
 
 /** 纯净化按标准化表输出睡眠/一/二/三档；带加湿能力的映射暂保留原规则。 */
-static enum apl_fan_gear apl_core_aq_gear(const struct apl_core_state *state)
+static enum apl_fan_gear apl_core_aq_gear(const struct apl_core_state *state) APL_CALL
 {
     switch (state->aq_level)
     {
@@ -352,7 +373,7 @@ static enum apl_fan_gear apl_core_aq_gear(const struct apl_core_state *state)
     }
 }
 
-static uint8_t apl_core_constant_humidity(const struct apl_core_state *state)
+static uint8_t apl_core_constant_humidity(const struct apl_core_state *state) APL_CALL
 {
     return ((0u != apl_core_has_humidify(state))
             && (0u != state->humidify_on)
@@ -360,7 +381,7 @@ static uint8_t apl_core_constant_humidity(const struct apl_core_state *state)
 }
 
 /** 加湿器交互逻辑 C9:E9。已读取不等于传感器有效，后者仍由宿主保证。 */
-static enum apl_fan_gear apl_core_humidify_auto_gear(const struct apl_core_state *state)
+static enum apl_fan_gear apl_core_humidify_auto_gear(const struct apl_core_state *state) APL_CALL
 {
     /* 没有样本、回调或整数百分比时保留旧输出，不在此定义故障策略。 */
     if ((0u == state->humidity_sampled) || (NULL == state->ops)
@@ -377,7 +398,7 @@ static enum apl_fan_gear apl_core_humidify_auto_gear(const struct apl_core_state
     return (state->humidity <= 50u) ? APL_FAN_GEAR_2 : APL_FAN_GEAR_1;
 }
 
-static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state *state)
+static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state *state) APL_CALL
 {
     enum apl_fan_gear gear;
     enum apl_fan_gear humidity_gear;
@@ -418,7 +439,7 @@ static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state
 }
 
 /** 达到目标停泵，低于目标一个回差再开泵。不恒湿时一直加湿。 */
-static void apl_core_humidity_hold_update(struct apl_core_state *state)
+static void apl_core_humidity_hold_update(struct apl_core_state *state) APL_CALL
 {
     if (0u == apl_core_constant_humidity(state))
     {
@@ -450,7 +471,7 @@ struct apl_core_output_targets
 /** 按原顺序提交变化；每次回调前只更新对应执行器，保留回调内可见快照。 */
 static void apl_core_outputs_apply(struct apl_core *self,
                                    const struct apl_core_ops *ops,
-                                   const struct apl_core_output_targets *targets)
+                                   const struct apl_core_output_targets *targets) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -499,7 +520,7 @@ static void apl_core_outputs_apply(struct apl_core *self,
 }
 
 /** 保留原有策略及副作用的计算时机，再交由统一执行器边界提交。 */
-static void apl_core_outputs_update(struct apl_core *self)
+static void apl_core_outputs_update(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
     struct apl_core_output_targets targets;
@@ -545,7 +566,7 @@ static void apl_core_outputs_update(struct apl_core *self)
     apl_core_outputs_apply(self, ops, &targets);
 }
 
-static void apl_core_shortage_start(struct apl_core_state *state)
+static void apl_core_shortage_start(struct apl_core_state *state) APL_CALL
 {
     if ((0u != state->shortage) || (0u == apl_core_has_humidify(state)))
     {
@@ -558,7 +579,7 @@ static void apl_core_shortage_start(struct apl_core_state *state)
     apl_core_beep_unless_sleep(state, APL_BEEP_WATER_SHORTAGE);
 }
 
-static void apl_core_shortage_clear(struct apl_core_state *state)
+static void apl_core_shortage_clear(struct apl_core_state *state) APL_CALL
 {
     state->shortage = 0u;
     state->shortage_s = 0u;
@@ -569,7 +590,7 @@ static void apl_core_shortage_clear(struct apl_core_state *state)
  * 第一次读数只建立边沿起点。没有上一拍时，无从判断是下降还是上升。
  * 非法段数丢掉，避免一次坏读数把起点改掉。
  */
-static void apl_core_water_sample(struct apl_core *self)
+static void apl_core_water_sample(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
     enum apl_water_level level;
@@ -631,10 +652,10 @@ static void apl_core_water_sample(struct apl_core *self)
 }
 
 /** 关机期间也计时，这样到时回调可以负责开机。 */
-static void apl_core_timer_tick(struct apl_core *self)
+static void apl_core_timer_tick(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
-    void (*on_timer)(struct apl_core *timer_self, void *timer_ctx);
+    void (*on_timer)(struct apl_core *timer_self, void *timer_ctx) APL_CALL;
     void *timer_ctx;
 
     state = apl_core_state_of(self);
@@ -666,7 +687,7 @@ static void apl_core_timer_tick(struct apl_core *self)
     }
 }
 
-static void apl_core_dry_start(struct apl_core *self)
+static void apl_core_dry_start(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -684,7 +705,7 @@ static void apl_core_dry_start(struct apl_core *self)
 }
 
 /** 恢复出厂设置。真实滤网寿命不清零，产测注入值丢掉。 */
-static void apl_core_factory_restore(struct apl_core *self)
+static void apl_core_factory_restore(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -718,7 +739,7 @@ static void apl_core_factory_restore(struct apl_core *self)
     }
 }
 
-static void apl_core_second(struct apl_core *self)
+static void apl_core_second(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -798,13 +819,13 @@ static void apl_core_second(struct apl_core *self)
 }
 
 /** 面板定时到期：整机关机进入待机。 */
-static void apl_core_panel_timer_expire(struct apl_core *self, void *ctx)
+static void apl_core_panel_timer_expire(struct apl_core *self, void *ctx) APL_CALL
 {
-    (void)ctx;
+    APL_UNUSED_PARAM(ctx);
     apl_core_power_off(self);
 }
 
-void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *ctx)
+void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *ctx) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -837,7 +858,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 #endif
 }
 
-void apl_core_tick(struct apl_core *self)
+void apl_core_tick(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -860,7 +881,7 @@ void apl_core_tick(struct apl_core *self)
     apl_core_outputs_update(self);
 }
 
-void apl_core_power_on(struct apl_core *self)
+void apl_core_power_on(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -890,7 +911,7 @@ void apl_core_power_on(struct apl_core *self)
     apl_core_memory_notify(self);
 }
 
-void apl_core_power_off(struct apl_core *self)
+void apl_core_power_off(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -928,7 +949,7 @@ void apl_core_power_off(struct apl_core *self)
     }
 }
 
-enum apl_power apl_core_get_power(const struct apl_core *self)
+enum apl_power apl_core_get_power(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -938,7 +959,7 @@ enum apl_power apl_core_get_power(const struct apl_core *self)
     return apl_core_state_of_const(self)->power;
 }
 
-enum apl_run_state apl_core_get_run_state(const struct apl_core *self)
+enum apl_run_state apl_core_get_run_state(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -950,8 +971,8 @@ enum apl_run_state apl_core_get_run_state(const struct apl_core *self)
 
 void apl_core_set_timer(struct apl_core *self,
                         uint32_t seconds,
-                        void (*on_timer)(struct apl_core *timer_self, void *timer_ctx),
-                        void *ctx)
+                        void (*on_timer)(struct apl_core *timer_self, void *timer_ctx) APL_CALL,
+                        void *ctx) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -974,7 +995,7 @@ void apl_core_set_timer(struct apl_core *self,
     state->timer_ctx = ctx;
 }
 
-uint32_t apl_core_get_timer(const struct apl_core *self)
+uint32_t apl_core_get_timer(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -984,7 +1005,7 @@ uint32_t apl_core_get_timer(const struct apl_core *self)
     return apl_core_state_of_const(self)->timer_left_s;
 }
 
-void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear)
+void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear) APL_CALL
 {
     if ((NULL == self) || (0u == apl_core_gear_is_valid(gear)))
     {
@@ -994,7 +1015,7 @@ void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear)
     apl_core_state_of(self)->fan_gear = gear;
 }
 
-enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self)
+enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1004,7 +1025,7 @@ enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self)
     return apl_core_state_of_const(self)->fan_gear;
 }
 
-static enum apl_fan_gear apl_core_gear_next(enum apl_fan_gear gear)
+static enum apl_fan_gear apl_core_gear_next(enum apl_fan_gear gear) APL_CALL
 {
     switch (gear)
     {
@@ -1021,7 +1042,7 @@ static enum apl_fan_gear apl_core_gear_next(enum apl_fan_gear gear)
     }
 }
 
-static enum apl_link_result apl_core_cmd_power(struct apl_core *self)
+static enum apl_link_result apl_core_cmd_power(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -1049,7 +1070,7 @@ static enum apl_link_result apl_core_cmd_power(struct apl_core *self)
 }
 
 static enum apl_link_result apl_core_cmd_fan(struct apl_core *self,
-                                             const struct apl_link_command *command)
+                                             const struct apl_link_command *command) APL_CALL
 {
     struct apl_core_state *state;
     enum apl_fan_gear base;
@@ -1076,10 +1097,9 @@ static enum apl_link_result apl_core_cmd_fan(struct apl_core *self,
         state->fan_gear = (enum apl_fan_gear)command->arg;
         break;
     case APL_LINK_CMD_TURBO_TOGGLE:
-        if (0u == APL_CORE_HAS_TURBO)
-        {
-            return APL_LINK_REJECTED;
-        }
+#if (APL_CORE_HAS_TURBO == 0u)
+        return APL_LINK_REJECTED;
+#else
         if (APL_FAN_GEAR_TURBO == state->fan_gear)
         {
             state->fan_gear = state->gear_before_turbo;
@@ -1090,6 +1110,7 @@ static enum apl_link_result apl_core_cmd_fan(struct apl_core *self,
             state->fan_gear = APL_FAN_GEAR_TURBO;
         }
         break;
+#endif
     case APL_LINK_CMD_SLEEP_TOGGLE:
         if (APL_FAN_GEAR_SLEEP == state->fan_gear)
         {
@@ -1111,7 +1132,7 @@ static enum apl_link_result apl_core_cmd_fan(struct apl_core *self,
     return APL_LINK_OK;
 }
 
-static uint8_t apl_core_target_is_valid(uint8_t target)
+static uint8_t apl_core_target_is_valid(uint8_t target) APL_CALL
 {
     if (APL_HUMIDITY_TARGET_OFF == target)
     {
@@ -1126,18 +1147,18 @@ static uint8_t apl_core_target_is_valid(uint8_t target)
     return (0u == ((target - APL_CORE_HUMIDITY_MIN) % APL_CORE_HUMIDITY_STEP)) ? 1u : 0u;
 }
 
-static uint8_t apl_core_water_ok(const struct apl_core_state *state)
+static uint8_t apl_core_water_ok(const struct apl_core_state *state) APL_CALL
 {
     return ((0u == state->water_valid) || (APL_WATER_LEVEL_0 != state->water_level)) ? 1u : 0u;
 }
 
-static uint8_t apl_core_on_or_standby(const struct apl_core_state *state)
+static uint8_t apl_core_on_or_standby(const struct apl_core_state *state) APL_CALL
 {
     return ((APL_RUN_ON == state->run_state) || (APL_RUN_STANDBY == state->run_state))
            ? 1u : 0u;
 }
 
-static enum apl_link_result apl_core_cmd_filter_reset(struct apl_core *self)
+static enum apl_link_result apl_core_cmd_filter_reset(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
     uint8_t purify;
@@ -1169,7 +1190,8 @@ static enum apl_link_result apl_core_cmd_filter_reset(struct apl_core *self)
     }
 
     /* 一体机共用计时时两套一起清零；否则只清启用的那一套。 */
-    if ((0u != purify) && (0u != humidify) && (0u == APL_CORE_FILTER_SHARED))
+#if (APL_CORE_FILTER_SHARED == 0u)
+    if ((0u != purify) && (0u != humidify))
     {
         if (state->filter_purify_s >= state->filter_humidify_s)
         {
@@ -1181,6 +1203,7 @@ static enum apl_link_result apl_core_cmd_filter_reset(struct apl_core *self)
         }
     }
     else
+#endif
     {
         if (0u != purify)
         {
@@ -1201,7 +1224,7 @@ static enum apl_link_result apl_core_cmd_filter_reset(struct apl_core *self)
     return APL_LINK_OK;
 }
 
-static enum apl_link_result apl_core_cmd_factory_enter(struct apl_core *self)
+static enum apl_link_result apl_core_cmd_factory_enter(struct apl_core *self) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -1224,7 +1247,7 @@ static enum apl_link_result apl_core_cmd_factory_enter(struct apl_core *self)
 }
 
 enum apl_link_result apl_core_command(struct apl_core *self,
-                                      const struct apl_link_command *command)
+                                      const struct apl_link_command *command) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -1309,7 +1332,7 @@ enum apl_link_result apl_core_command(struct apl_core *self,
     }
 }
 
-void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot *snapshot)
+void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot *snapshot) APL_CALL
 {
     const struct apl_core_state *state;
 
@@ -1363,7 +1386,7 @@ void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot
     }
 }
 
-void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *memory)
+void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *memory) APL_CALL
 {
     if (NULL == memory)
     {
@@ -1379,7 +1402,7 @@ void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *me
     apl_core_memory_fill(apl_core_state_of_const(self), memory);
 }
 
-void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory *memory)
+void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory *memory) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -1412,7 +1435,7 @@ void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory
     }
 }
 
-void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected)
+void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected) APL_CALL
 {
     struct apl_core_state *state;
 
@@ -1427,7 +1450,7 @@ void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected)
 }
 
 #if APL_COMPILE_PURIFY
-void apl_core_filter_purify_reset(struct apl_core *self)
+void apl_core_filter_purify_reset(struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1437,7 +1460,7 @@ void apl_core_filter_purify_reset(struct apl_core *self)
     apl_core_state_of(self)->filter_purify_s = 0u;
 }
 
-uint32_t apl_core_get_filter_purify(const struct apl_core *self)
+uint32_t apl_core_get_filter_purify(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1447,7 +1470,7 @@ uint32_t apl_core_get_filter_purify(const struct apl_core *self)
     return apl_core_state_of_const(self)->filter_purify_s;
 }
 
-uint8_t apl_core_get_purify_enabled(const struct apl_core *self)
+uint8_t apl_core_get_purify_enabled(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1459,7 +1482,7 @@ uint8_t apl_core_get_purify_enabled(const struct apl_core *self)
 #endif
 
 #if APL_COMPILE_HUMIDIFY
-void apl_core_filter_humidify_reset(struct apl_core *self)
+void apl_core_filter_humidify_reset(struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1469,7 +1492,7 @@ void apl_core_filter_humidify_reset(struct apl_core *self)
     apl_core_state_of(self)->filter_humidify_s = 0u;
 }
 
-uint32_t apl_core_get_filter_humidify(const struct apl_core *self)
+uint32_t apl_core_get_filter_humidify(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {
@@ -1479,7 +1502,7 @@ uint32_t apl_core_get_filter_humidify(const struct apl_core *self)
     return apl_core_state_of_const(self)->filter_humidify_s;
 }
 
-uint8_t apl_core_get_humidify_enabled(const struct apl_core *self)
+uint8_t apl_core_get_humidify_enabled(const struct apl_core *self) APL_CALL
 {
     if (NULL == self)
     {

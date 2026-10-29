@@ -11,15 +11,15 @@
 #ifndef APL_CORE_H
 #define APL_CORE_H
 
-#include <stdint.h>
+#include "apl_platform.h"
 
 #include "apl_core_config.h"
 #include "apl_type.h"
 
 #define APL_CORE_VERSION_MAJOR  0
 #define APL_CORE_VERSION_MINOR  1
-#define APL_CORE_VERSION_PATCH  1
-#define APL_CORE_VERSION_STRING "0.1.1"
+#define APL_CORE_VERSION_PATCH  2
+#define APL_CORE_VERSION_STRING "0.1.2"
 #define APL_CORE_VERSION_NUM \
     ((APL_CORE_VERSION_MAJOR << 16) | (APL_CORE_VERSION_MINOR << 8) | APL_CORE_VERSION_PATCH)
 
@@ -41,22 +41,22 @@ struct apl_core;
  */
 struct apl_core_ops
 {
-    enum apl_water_level (*get_water_level)(void *ctx);
-    uint16_t (*get_pm25)(void *ctx);        /**< μg/m³，整数 */
-    uint8_t (*get_humidity)(void *ctx);     /**< 相对湿度，整数百分比 */
-    int16_t (*get_temperature)(void *ctx);  /**< 摄氏度，整数。目前没有业务使用 */
-    void (*water_on_trigger)(struct apl_core *self, void *ctx);
-    void (*water_on_recover)(struct apl_core *self, void *ctx);
-    void (*set_uv)(enum apl_switch state, void *ctx);
-    void (*set_anion)(enum apl_switch state, void *ctx);
-    void (*on_power_off)(struct apl_core *self, void *ctx);
-    uint16_t (*get_pm10)(void *ctx);        /**< μg/m³。选配，空则不参与空气质量判定 */
-    uint16_t (*get_hcho)(void *ctx);        /**< 甲醛，μg/m³（mg/m³ × 1000）。选配 */
-    uint16_t (*get_tvoc)(void *ctx);        /**< TVOC，μg/m³（mg/m³ × 1000）。选配 */
-    uint8_t (*get_uv_interlock)(void *ctx); /**< UV 安全微动开关，1 闭合。空则视为闭合 */
-    void (*set_fan)(enum apl_switch state, enum apl_fan_gear gear, void *ctx);
-    void (*set_pump)(enum apl_switch state, void *ctx);  /**< 水泵与雾化等加湿负载 */
-    void (*memory_save)(const struct apl_core_memory *memory, void *ctx);
+    enum apl_water_level (*get_water_level)(void *ctx) APL_CALL;
+    uint16_t (*get_pm25)(void *ctx) APL_CALL;        /**< μg/m³，整数 */
+    uint8_t (*get_humidity)(void *ctx) APL_CALL;     /**< 相对湿度，整数百分比 */
+    int16_t (*get_temperature)(void *ctx) APL_CALL;  /**< 摄氏度，整数。目前没有业务使用 */
+    void (*water_on_trigger)(struct apl_core *self, void *ctx) APL_CALL;
+    void (*water_on_recover)(struct apl_core *self, void *ctx) APL_CALL;
+    void (*set_uv)(enum apl_switch state, void *ctx) APL_CALL;
+    void (*set_anion)(enum apl_switch state, void *ctx) APL_CALL;
+    void (*on_power_off)(struct apl_core *self, void *ctx) APL_CALL;
+    uint16_t (*get_pm10)(void *ctx) APL_CALL;        /**< μg/m³。选配，空则不参与空气质量判定 */
+    uint16_t (*get_hcho)(void *ctx) APL_CALL;        /**< 甲醛，μg/m³（mg/m³ × 1000）。选配 */
+    uint16_t (*get_tvoc)(void *ctx) APL_CALL;        /**< TVOC，μg/m³（mg/m³ × 1000）。选配 */
+    uint8_t (*get_uv_interlock)(void *ctx) APL_CALL; /**< UV 安全微动开关，1 闭合。空则视为闭合 */
+    void (*set_fan)(enum apl_switch state, enum apl_fan_gear gear, void *ctx) APL_CALL;
+    void (*set_pump)(enum apl_switch state, void *ctx) APL_CALL;  /**< 水泵与雾化等加湿负载 */
+    void (*memory_save)(const struct apl_core_memory *memory, void *ctx) APL_CALL;
 };
 
 /** 占位对象。使用方声明它来持有实例，不读写 storage。 */
@@ -65,8 +65,8 @@ struct apl_core
     union
     {
         void *align_ptr;
-        void (*align_fn)(void);
-        long long align_ll;
+        void (*align_fn)(void) APL_CALL;
+        APL_ALIGN_INTEGER align_ll;
         double align_d;
         unsigned char bytes[APL_CORE_OPAQUE_SIZE];
     } storage;
@@ -78,7 +78,7 @@ struct apl_core
  * @param ops 宿主函数表。可以为空，空则所有硬件访问都不调用
  * @param ctx 调用 ops 时原样传回
  */
-void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *ctx);
+void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *ctx) APL_CALL;
 
 /**
  * @brief 推进一拍
@@ -89,13 +89,13 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
  * 运行中每秒读一次传感器：净化启用时读 pm25/pm10/hcho/tvoc，加湿启用时读湿度。
  * 风干倒计时、缺水计时、滤网计时、配网超时也在这里按秒推进。
  */
-void apl_core_tick(struct apl_core *self);
+void apl_core_tick(struct apl_core *self) APL_CALL;
 
 /**
  * @brief 进入开机
  * @param self 主控对象
  */
-void apl_core_power_on(struct apl_core *self);
+void apl_core_power_on(struct apl_core *self) APL_CALL;
 
 /**
  * @brief 进入关机
@@ -104,14 +104,14 @@ void apl_core_power_on(struct apl_core *self);
  * 从开机进入关机时，先清掉剩余定时，再调用 on_power_off 一次。
  * 已经关机时不再调用。断电来不及走这里。
  */
-void apl_core_power_off(struct apl_core *self);
+void apl_core_power_off(struct apl_core *self) APL_CALL;
 
 /**
  * @brief 读取整机状态
  * @param self 主控对象
  * @return APL_POWER_ON 或 APL_POWER_OFF。self 为空时返回 APL_POWER_OFF
  */
-enum apl_power apl_core_get_power(const struct apl_core *self);
+enum apl_power apl_core_get_power(const struct apl_core *self) APL_CALL;
 
 /**
  * @brief 按新的秒数和回调重新设定定时
@@ -125,15 +125,15 @@ enum apl_power apl_core_get_power(const struct apl_core *self);
  */
 void apl_core_set_timer(struct apl_core *self,
                         uint32_t seconds,
-                        void (*on_timer)(struct apl_core *self, void *ctx),
-                        void *ctx);
+                        void (*on_timer)(struct apl_core *self, void *ctx) APL_CALL,
+                        void *ctx) APL_CALL;
 
 /**
  * @brief 读取剩余定时秒数
  * @param self 主控对象
  * @return 剩余秒数。没有定时或 self 为空时返回 0
  */
-uint32_t apl_core_get_timer(const struct apl_core *self);
+uint32_t apl_core_get_timer(const struct apl_core *self) APL_CALL;
 
 /**
  * @brief 设定风机档位
@@ -142,14 +142,14 @@ uint32_t apl_core_get_timer(const struct apl_core *self);
  *
  * 记下用户档位。实际输出见快照的 fan_output 和 ops 的 set_fan。
  */
-void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear);
+void apl_core_set_fan_gear(struct apl_core *self, enum apl_fan_gear gear) APL_CALL;
 
 /**
  * @brief 读取风机档位
  * @param self 主控对象
  * @return 当前档位。self 为空时返回 APL_DEFAULT_FAN_GEAR
  */
-enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self);
+enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self) APL_CALL;
 
 
 /**
@@ -162,28 +162,28 @@ enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self);
  * 每种操作的条件见后端规格书第 3.2 节。
  */
 enum apl_link_result apl_core_command(struct apl_core *self,
-                                      const struct apl_link_command *command);
+                                      const struct apl_link_command *command) APL_CALL;
 
 /**
  * @brief 取当前状态快照
  * @param self 主控对象。为空时把 snapshot 清零
  * @param snapshot 输出。空指针则不写
  */
-void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot *snapshot);
+void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot *snapshot) APL_CALL;
 
 /**
  * @brief 读取运行状态
  * @param self 主控对象
  * @return 当前运行状态。self 为空时返回 APL_RUN_STANDBY
  */
-enum apl_run_state apl_core_get_run_state(const struct apl_core *self);
+enum apl_run_state apl_core_get_run_state(const struct apl_core *self) APL_CALL;
 
 /**
  * @brief 取需要掉电保存的内容
  * @param self 主控对象。为空时把 memory 清零
  * @param memory 输出。产测期间给出的是真实滤网计时，不是产测注入值
  */
-void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *memory);
+void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *memory) APL_CALL;
 
 /**
  * @brief 上电后交还掉电保存的内容
@@ -193,21 +193,21 @@ void apl_core_get_memory(const struct apl_core *self, struct apl_core_memory *me
  * 在 apl_core_init 之后、第一拍之前调用。产测未完成时先恢复出厂设置；
  * 掉电前在运行则自动开机，按掉电前档位运行。风干中掉电不算运行，上电保持待机。
  */
-void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory *memory);
+void apl_core_memory_restore(struct apl_core *self, const struct apl_core_memory *memory) APL_CALL;
 
 /**
  * @brief 宿主报告 Wi-Fi 是否已联网
  * @param self 主控对象
  * @param connected 1 已联网，0 未联网。其他值不改
  */
-void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected);
+void apl_core_set_wifi_connected(struct apl_core *self, uint8_t connected) APL_CALL;
 
 #if APL_COMPILE_PURIFY
 /**
  * @brief 把净化滤芯累计计数清零
  * @param self 主控对象
  */
-void apl_core_filter_purify_reset(struct apl_core *self);
+void apl_core_filter_purify_reset(struct apl_core *self) APL_CALL;
 
 /**
  * @brief 读取净化滤芯累计计数
@@ -216,7 +216,7 @@ void apl_core_filter_purify_reset(struct apl_core *self);
  *
  * 单位为秒，只在运行中累计。除重置外没有写入方法。
  */
-uint32_t apl_core_get_filter_purify(const struct apl_core *self);
+uint32_t apl_core_get_filter_purify(const struct apl_core *self) APL_CALL;
 
 /**
  * @brief 读取空气净化是否启用
@@ -225,7 +225,7 @@ uint32_t apl_core_get_filter_purify(const struct apl_core *self);
  *
  * 修改入口尚未规定，因此没有对应的 setter。初始值来自 APL_DEFAULT_PURIFY。
  */
-uint8_t apl_core_get_purify_enabled(const struct apl_core *self);
+uint8_t apl_core_get_purify_enabled(const struct apl_core *self) APL_CALL;
 #endif
 
 #if APL_COMPILE_HUMIDIFY
@@ -233,7 +233,7 @@ uint8_t apl_core_get_purify_enabled(const struct apl_core *self);
  * @brief 把加湿滤网累计计数清零
  * @param self 主控对象
  */
-void apl_core_filter_humidify_reset(struct apl_core *self);
+void apl_core_filter_humidify_reset(struct apl_core *self) APL_CALL;
 
 /**
  * @brief 读取加湿滤网累计计数
@@ -242,7 +242,7 @@ void apl_core_filter_humidify_reset(struct apl_core *self);
  *
  * 单位为秒，只在运行中累计。除重置外没有写入方法。
  */
-uint32_t apl_core_get_filter_humidify(const struct apl_core *self);
+uint32_t apl_core_get_filter_humidify(const struct apl_core *self) APL_CALL;
 
 /**
  * @brief 读取加湿是否启用
@@ -251,7 +251,7 @@ uint32_t apl_core_get_filter_humidify(const struct apl_core *self);
  *
  * 修改入口尚未规定，因此没有对应的 setter。初始值来自 APL_DEFAULT_HUMIDIFY。
  */
-uint8_t apl_core_get_humidify_enabled(const struct apl_core *self);
+uint8_t apl_core_get_humidify_enabled(const struct apl_core *self) APL_CALL;
 #endif
 
 #endif /* APL_CORE_H */

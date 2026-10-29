@@ -9,7 +9,7 @@
 #ifndef APL_TYPE_H
 #define APL_TYPE_H
 
-#include <stdint.h>
+#include "apl_platform.h"
 
 /** 整机状态。同一时刻只有一个。 */
 enum apl_power
