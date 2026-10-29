@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "templateVersion": "0.4.0",
+  "sourceVersion": "0.2.0",
+  "sourceCommit": "f69f552de927a866e3ff55f8facbf85234bdebd3",
+  "rootFiles": {
+    "src/apl.c": "0efaa98b7376c08a876978a35527ebd57985294420938a993a2d936dd165f9db",
+    "src/apl_core.c": "b2ad724342f78f4714f841083acce15a1d2a9a63b3f387e4ce91a0e7064e240d",
+    "src/apl_hmi.c": "53823b79c119a2338818658efe18fe30f65ee5d23501f838d7ee760085500455",
+    "include/apl.h": "07f72e287bb9213edd98534c23e837dd6605097ee549e38ece19f11e6685fb70",
+    "include/apl_core.h": "0da860a3c157471a580ef38aa04634769958f3ebc01d3a675aa857e535227018",
+    "include/apl_hmi.h": "18c7a2810d7899b9aac8d180d0ea8db83ed1d8ac18a2c96efd7d7d0f2a74565c",
+    "include/apl_platform.h": "b31d33afbb7cd5e909bf86d38804ecedcf79c8cb191460d2d97bfd4c96752e15",
+    "include/apl_type.h": "6e19a5cb57d90a151e69fa9d4f78bdc8a1684d6e9c44fe1c313631318a79c589",
+    "config/apl_core_config.h": "bac17825f34a8b7eb711bb96df4806e1b1d09eebe741a63c2616df1d7d86917a",
+    "config/apl_hmi_config.h": "540e6f6bffa13ca8a39cc3efa20f48b65569fb2b06c2dcf98027537b8c197237"
+  },
+  "validationSource": {
+    "path": "tests/test_sdk_release.c",
+    "sha256": "8d000f4cc13f92f259415043869a2eea9f542dd30c71a516c5611bc2c7319f42"
+  },
+  "sdkConsumer": {
+    "path": "verification/consumer.c",
+    "sha256": "1aac68ff7dc08a851a930336761c7dee64134eb5762af7ebbdc8fb800d17e1ac",
+    "adaptation": "PM2.5 auto boundaries only apply when PM25 is selected; common manual gear checks always run"
+  }
+}

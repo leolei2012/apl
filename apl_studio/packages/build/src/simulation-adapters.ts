@@ -1,3 +1,4 @@
+import { createAdvancedAdapter } from './advanced-adapter'
 import { readFileSync } from 'node:fs'
 import type { Definition } from '@apl-studio/model'
 import type { TemplateDescriptor } from '@apl-studio/model/template'
@@ -45,4 +46,4 @@ export const lightingSimulation: SimulationAdapter = {
     outputs: [slot('light', '灯光输出', true), slot('brightness', '实际亮度', false, '%')],
     internal: [slot('power', '开灯请求', true), slot('brightness', '请求亮度', false, '%'), slot('elapsed_ms', '启动累计', false, 'ms')], display: [] }),
 }
-export const simulationAdapters: SimulationAdapter[] = [airCareSimulation, lightingSimulation]
+export const simulationAdapters: SimulationAdapter[] = [createAdvancedAdapter(airCareSimulation), airCareSimulation, lightingSimulation]

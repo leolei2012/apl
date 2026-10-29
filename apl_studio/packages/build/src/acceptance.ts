@@ -1,3 +1,4 @@
+import { advancedAcceptance } from './advanced-acceptance'
 import { standardAcceptance } from './standard-acceptance'
 import { standardDeliverables } from './standard-deliverables'
 import { createHash, randomUUID } from 'node:crypto'
@@ -74,7 +75,7 @@ export class AcceptanceService {
     if ([...this.reports.values()].some(r => r.status === 'running')) throw failure('已有场景验收正在运行，请稍后重试', 'ACCEPTANCE_BUSY')
     const report: AcceptanceReport = { id: randomUUID(), productId: product.id, revision: product.revision,
       definitionFingerprint: hash(JSON.stringify(product.definition)), template: { id: provider.descriptor.id, version: provider.descriptor.version, fingerprint: provider.descriptor.fingerprint },
-      sourceVersion: provider.descriptor.sourceVersion, sourceFingerprint: '', driverFingerprint: driverFingerprint(product, provider), status: 'running', createdAt: new Date().toISOString(), scope: provider.descriptor.workflow === 'air-care-standard-v1' ? '三能力组合的标准面板、Auto/睡眠、Turbo、缺水/风干、维护与UV联锁场景；未含实机、全部规格及未决规则' : scope, checks: [], diagnostics: '' }
+      sourceVersion: provider.descriptor.sourceVersion, sourceFingerprint: '', driverFingerprint: driverFingerprint(product, provider), status: 'running', createdAt: new Date().toISOString(), scope: provider.descriptor.workflow === 'air-care-standard-v2' ? '定时连增、睡眠独立计时、品类滤网维护、独立模块与输入状态契约；未含实机、全部Excel和未决规则' : provider.descriptor.workflow === 'air-care-standard-v1' ? '三能力组合的标准面板、Auto/睡眠、Turbo、缺水/风干、维护与UV联锁场景；未含实机、全部规格及未决规则' : scope, checks: [], diagnostics: '' }
     this.reports.set(report.id, report); this.persist(report)
     const task = this.execute(structuredClone(product), report).finally(() => this.tasks.delete(task))
     this.tasks.add(task)
@@ -113,6 +114,9 @@ export class AcceptanceService {
         report.checks.push({ name, expected, actual, passed, ms: s.ms }); this.persist(report)
         if (!passed) throw new Error('场景未通过：' + name)
       }
+      if (this.provider(product).descriptor.workflow === 'air-care-standard-v2') {
+        await advancedAcceptance(product, act, check); report.status = 'passed'; return
+      }
       if (this.provider(product).descriptor.workflow === 'air-care-standard-v1') {
         await standardAcceptance(product, act, check); report.status = 'passed'; return
       }
@@ -147,7 +151,7 @@ export class AcceptanceService {
   }
   async close() { await Promise.allSettled(this.tasks) }
   deliverables(product: Product, provider: TemplateProvider, report: AcceptanceReport): Map<string, Uint8Array> {
-    if (provider.descriptor.workflow === 'air-care-standard-v1') return standardDeliverables(product, provider.descriptor, report)
+    if (['air-care-standard-v1','air-care-standard-v2'].includes(provider.descriptor.workflow ?? '')) return standardDeliverables(product, provider.descriptor, report)
     const turbo = product.definition.parameters.find(p => p.key === 'turbo_enabled')?.value === true
     const gear = product.definition.functions.find(f => f.key === 'fan_speed')?.default
     const gears = ['睡眠', '一档', '二档', '三档', '自动', '极速']

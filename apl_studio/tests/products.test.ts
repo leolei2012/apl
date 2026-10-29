@@ -35,7 +35,7 @@ async function finished(builds: SdkBuildService, id: string) {
 test('同一目录发现 AP 与独立灯控；品类、默认标识、表单均来自模板', () => {
   const registry = new TemplateRegistry()
   registry.loadDirectory(catalog)
-  assert.equal(registry.list().length, 5)
+  assert.equal(registry.list().length, 6)
   const lamp = registry.get('standard.lighting', '1.0.0')!, air = registry.get('apl.air-care', '0.1.0')!
   assert.ok(lamp instanceof NativeCTemplate)
   const definition = definitionFromTemplate(lamp.descriptor, ['dimmable_light'])

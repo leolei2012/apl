@@ -15,7 +15,7 @@ export interface NativeVerification {
   sourceDirectories: string[]; includeDirectories: string[]; consumer: string; scope: string
 }
 export interface TemplateDescriptor {
-  workflow?: 'purification-pm-v1' | 'air-care-standard-v1'
+  workflow?: 'purification-pm-v1' | 'air-care-standard-v1' | 'air-care-standard-v2'
   engine?: 'apl-air-care-v1' | 'native-c-v1'
   productDefaults?: { code: string; category: string }
   previewFiles?: string[]
