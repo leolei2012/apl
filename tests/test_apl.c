@@ -2,8 +2,8 @@
  * @file    test_apl.c
  * @brief   宿主侧检查已实现的主控和人机行为。
  *
- * cl /nologo /std:c11 /utf-8 /W4 /WX /I include /I config
- *    tests\test_apl.c src\apl.c src\apl_core.c src\apl_hmi.c
+ * cl /nologo /std:c11 /utf-8 /W4 /WX /I apl_lib/include /I apl_lib/config
+ *    tests\test_apl.c apl_lib\src\apl.c apl_lib\src\apl_core.c apl_lib\src\apl_hmi.c
  */
 
 #include "apl.h"

@@ -21,25 +21,33 @@ Push-Location -LiteralPath $root
 try {
     $revision = git rev-parse --verify ($BaselineRef + '^{commit}')
     if ($LASTEXITCODE -ne 0) { throw 'Baseline revision unavailable' }
-    # Same public ABI, configuration and composition/HMI source on both sides.
-    git diff --exit-code $revision -- include config src/apl.c src/apl_hmi.c
-    if ($LASTEXITCODE -ne 0) { throw 'Public inputs differ from baseline; review before comparing' }
+    # Support baselines from before/after the apl_lib directory move.
+    $baselinePrefix = if (@(git ls-tree --name-only $revision apl_lib).Count) { 'apl_lib/' } else { '' }
+    $libraryRoot = Join-Path $root 'apl_lib'
+    $protected = @('include/apl.h','include/apl_core.h','include/apl_hmi.h','include/apl_type.h',
+        'config/apl_core_config.h','config/apl_hmi_config.h','src/apl.c','src/apl_hmi.c')
+    foreach ($path in $protected) {
+        $expected = git rev-parse --verify ($revision + ':' + $baselinePrefix + $path)
+        if ($LASTEXITCODE -ne 0) { throw "Baseline input missing: $path" }
+        $actual = git hash-object -- (Join-Path $libraryRoot $path)
+        if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) { throw "Public input differs: $path" }
+    }
     New-Item -ItemType Directory -Path $checkDir | Out-Null
     $oldCore = Join-Path $checkDir 'baseline_core.c'
-    git show ($revision + ':src/apl_core.c') | Set-Content -LiteralPath $oldCore -Encoding utf8
+    git show ($revision + ':' + $baselinePrefix + 'src/apl_core.c') | Set-Content -LiteralPath $oldCore -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'Could not export baseline core' }
     $modes = @(
         @{Name='both'; Defines=@()},
         @{Name='purify'; Defines=@('-DAPL_COMPILE_HUMIDIFY=0','-DAPL_DEFAULT_HUMIDIFY=0')},
         @{Name='humidify'; Defines=@('-DAPL_COMPILE_PURIFY=0','-DAPL_DEFAULT_PURIFY=0')}
     )
-    $common = @('-std=c11','-Wall','-Wextra','-Werror','-finput-charset=UTF-8','-Os','-Iinclude','-Iconfig')
+    $common = @('-std=c11','-Wall','-Wextra','-Werror','-finput-charset=UTF-8','-Os','-Iapl_lib/include','-Iapl_lib/config')
     $shortTimes = @('-DAPL_CORE_DRY_S=3','-DAPL_CORE_WATER_SHORTAGE_RUN_S=4','-DAPL_CORE_WATER_BLINK_S=2')
     $report = @()
     foreach ($mode in $modes) {
         $versions = @()
         foreach ($version in @('baseline','working')) {
-            $core = if ($version -eq 'baseline') { $oldCore } else { Join-Path $root 'src/apl_core.c' }
+            $core = if ($version -eq 'baseline') { $oldCore } else { Join-Path $libraryRoot 'src/apl_core.c' }
             $stem = Join-Path $checkDir ($mode.Name + '-' + $version)
             $exe = $stem + '.exe'
             & $Compiler @common @($mode.Defines) @shortTimes tests/test_output_trace.c $core -o $exe

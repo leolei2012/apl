@@ -2,8 +2,8 @@
  * @file    test_link.c
  * @brief   宿主侧检查主控业务、link_command / link_snapshot 和人机面板逻辑。
  *
- * gcc -std=c11 -Wall -Wextra -Werror -I include -I config
- *     tests/test_link.c src/apl.c src/apl_core.c src/apl_hmi.c
+ * gcc -std=c11 -Wall -Wextra -Werror -I apl_lib/include -I apl_lib/config
+ *     tests/test_link.c apl_lib/src/apl.c apl_lib/src/apl_core.c apl_lib/src/apl_hmi.c
  * 净化单开、加湿单开、两项都开三种编译都要通过。
  */
 

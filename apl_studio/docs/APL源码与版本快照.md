@@ -1,6 +1,8 @@
 # APL 根源码与本地版本快照
 
-APL业务只在工程根 `src/`、`include/`、`config/` 开发。`apl_sdk_template/air-care/<版本>` 是供Web配置、真实C仿真和SDK交付使用的冻结快照，不是另一份开发库。
+APL业务只在工程根`apl_lib/`内的`src/`、`include/`、`config/`开发。`apl_sdk_template/air-care/<版本>` 是供Web配置、真实C仿真和SDK交付使用的冻结快照，不是另一份开发库。
+
+目录整理只移动开发库，不更新版本。既有0.1.0/0.1.1及其中`source-snapshot.json`保持原字节；`rootFiles`的键仍为库内相对路径（如`src/apl_core.c`），用于校验冻结文件，不表示当前仓库根目录下仍有该路径。后续冻结从`apl_lib`读取，包内仍写入`src/include/config`，哈希及旧产品绑定契约不变。
 
 ## 版本契约
 
@@ -26,9 +28,10 @@ APL业务只在工程根 `src/`、`include/`、`config/` 开发。`apl_sdk_templ
 ```powershell
 $version = '0.1.1'
 $base = (Resolve-Path -LiteralPath 'apl_sdk_template/air-care/0.1.0').Path
+$libraryRoot = (Resolve-Path -LiteralPath 'apl_lib').Path
 $target = Join-Path (Get-Location) "apl_sdk_template/air-care/$version"
 if (Test-Path -LiteralPath $target) { throw '版本已存在，禁止覆盖' }
-$sourceVersion = [regex]::Match((Get-Content -LiteralPath include/apl.h -Raw), 'APL_VERSION_STRING\s+"([^"]+)"').Groups[1].Value
+$sourceVersion = [regex]::Match((Get-Content -LiteralPath (Join-Path $libraryRoot 'include/apl.h') -Raw), 'APL_VERSION_STRING\s+"([^"]+)"').Groups[1].Value
 if ($sourceVersion -ne $version) { throw '先同步并验证根库版本' }
 Copy-Item -LiteralPath $base -Destination $target -Recurse
 Set-Content -LiteralPath (Join-Path $target '.gitattributes') -Value '* -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol' -Encoding ascii
@@ -36,8 +39,9 @@ $files = @('include/apl.h','include/apl_core.h','include/apl_hmi.h','include/apl
   'config/apl_core_config.h','config/apl_hmi_config.h','src/apl.c','src/apl_core.c','src/apl_hmi.c')
 $hashes = [ordered]@{}
 foreach ($path in $files) {
-  Copy-Item -LiteralPath $path -Destination (Join-Path $target $path) -Force
-  $hashes[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sourcePath = Join-Path $libraryRoot $path
+  Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $target $path) -Force
+  $hashes[$path] = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ((Get-FileHash -LiteralPath (Join-Path $target $path)).Hash.ToLowerInvariant() -ne $hashes[$path]) { throw "复制不一致：$path" }
 }
 New-Item -ItemType Directory -Path (Join-Path $target 'verification') -Force | Out-Null

@@ -1,6 +1,6 @@
 # APL 能力组合与输出边界
 
-2026-10-29。开发源为根 `src/`、`include/`、`config/`。继续使用C结构体、`self`方法和ops注入，能力对象由拥有者持有，不引入堆分配或库内全局实例。净化、加湿等能力可以组合；产品名称只负责选择配置。
+2026-10-29。开发源为根 `apl_lib/src/`、`apl_lib/include/`、`apl_lib/config/`。继续使用C结构体、`self`方法和ops注入，能力对象由拥有者持有，不引入堆分配或库内全局实例。净化、加湿等能力可以组合；产品名称只负责选择配置。
 
 ## 已有边界和后续方向
 
@@ -21,7 +21,7 @@
 
 ## 第一检查点：私有输出目标与提交边界
 
-仅重构`src/apl_core.c`的输出路径：
+仅重构`apl_lib/src/apl_core.c`的输出路径：
 
 ```text
 原有策略及保护计算 → apl_core_output_targets → apl_core_outputs_apply

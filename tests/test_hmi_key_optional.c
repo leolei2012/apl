@@ -2,9 +2,9 @@
  * @file    test_hmi_key_optional.c
  * @brief   灯光键未编入时，手势和键灯都不起作用，其余键仍可用。
  *
- * cl /nologo /std:c11 /utf-8 /W4 /WX /I include /I config
+ * cl /nologo /std:c11 /utf-8 /W4 /WX /I apl_lib/include /I apl_lib/config
  *    /DAPL_HMI_COMPILE_KEY_LIGHT=0
- *    tests\test_hmi_key_optional.c src\apl.c src\apl_core.c src\apl_hmi.c
+ *    tests\test_hmi_key_optional.c apl_lib\src\apl.c apl_lib\src\apl_core.c apl_lib\src\apl_hmi.c
  */
 
 #include "apl.h"

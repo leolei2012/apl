@@ -4,12 +4,12 @@
 |---|---|
 | 文档状态 | 草稿 |
 | 对象 | `struct apl_hmi` |
-| 配置 | [config/apl_hmi_config.h](../../config/apl_hmi_config.h) |
+| 配置 | [apl_lib/config/apl_hmi_config.h](../../apl_lib/config/apl_hmi_config.h) |
 | 配套文档 | [apl前端规格书](./apl前端规格书.md) |
 
 本文描述人机库的对象。库内不创建实例。使用方持有 `struct apl`，人机是其中的 `struct apl_hmi`。这里只写显示内容和对象属性，不写引脚、驱动和扫描方式。
 
-对外接口在 [`include/apl_hmi.h`](../../include/apl_hmi.h)。下面是对象模型。引脚、驱动和扫描方式不在库里。
+对外接口在 [`apl_lib/include/apl_hmi.h`](../../apl_lib/include/apl_hmi.h)。下面是对象模型。引脚、驱动和扫描方式不在库里。
 
 ---
 
@@ -126,7 +126,7 @@ struct apl_hmi
 
 上图是属性模型。键灯和回调按 `enum apl_hmi_key_id` 访问，水位灯按段号 1 到 4 访问。方法以 `apl_hmi_` 为前缀，`self` 为第一个参数。库内不放 `static struct apl_hmi`。
 
-`apl_hmi` 不包含 `apl_core`，也不读取 `config/apl_core_config.h`。净化、加湿是否出现，看主控快照。快照里未启用的功能，对应键不产生命令，对应键灯亮度为 0。
+`apl_hmi` 不包含 `apl_core`，也不读取 `apl_lib/config/apl_core_config.h`。净化、加湿是否出现，看主控快照。快照里未启用的功能，对应键不产生命令，对应键灯亮度为 0。
 
 按键认出短按或长按后，调用该键对应的回调，并把 `self` 和 `ctx` 传入。人机不在回调里判断业务。使用方在回调里决定是否形成 `link_command`，或改这台人机上的灯。
 

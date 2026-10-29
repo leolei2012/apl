@@ -17,7 +17,7 @@
 
 本文定义库对象 `struct apl_hmi` 的职责，以及它与 `struct apl_core` 之间的数据边界。
 
-本仓库是库，库内不创建实例。使用方持有 `struct apl`，人机是其中的 `struct apl_hmi`。人机对象不包含 `apl_core`，也不读取主控的 [`config/apl_core_config.h`](../../config/apl_core_config.h)。人机自己的编译控制和默认值在 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)。`apl_init` 与 `apl_tick` 在 `src/apl.c`。
+本仓库是库，库内不创建实例。使用方持有 `struct apl`，人机是其中的 `struct apl_hmi`。人机对象不包含 `apl_core`，也不读取主控的 [`apl_lib/config/apl_core_config.h`](../../apl_lib/config/apl_core_config.h)。人机自己的编译控制和默认值在 [`apl_lib/config/apl_hmi_config.h`](../../apl_lib/config/apl_hmi_config.h)。`apl_init` 与 `apl_tick` 在 `apl_lib/src/apl.c`。
 
 空气净化与加湿是否启用由主控的动态配置决定。人机按快照绘制：动态配置未启用或未编译的功能不画。
 
@@ -63,13 +63,13 @@ core → link_snapshot → hmi → 屏 / 灯
 
 按键电平由宿主在 `apl_hmi_init` 注入的 `get_key_state` 一次给出六颗键。`apl_hmi_init` 让已编入的灯和三位数字管全亮，数字为 888；200 拍后熄灭，电源键半亮。使用方每 10 ms 调用 `apl_tick`，其中再调用 `apl_hmi_tick`。全亮阶段 `apl_hmi_get_powerup_lamp` 返回 1，使用方不要覆盖这些灯。短按在松开时发出，按下满 3 秒发出长按，同一次按下不重复。宿主和人机交换显示、童锁、启用标志和键回调时走 getter 和 setter。童锁、组合键和对象属性见 [HMI Datasheet](./datasheet.md)。
 
-命令和快照的类型在 `include/apl_type.h`，字段见后端规格书第 3.2 节。本库内两边同在一个 `struct apl`，直接传结构体；跨芯片的字节协议和断连表现待定。
+命令和快照的类型在 `apl_lib/include/apl_type.h`，字段见后端规格书第 3.2 节。本库内两边同在一个 `struct apl`，直接传结构体；跨芯片的字节协议和断连表现待定。
 
 ---
 
 ## 4. 配置
 
-[`config/apl_hmi_config.h`](../../config/apl_hmi_config.h) 只做人机的编译控制和默认值。主控的 `apl_core_config.h` 不包含面板。
+[`apl_lib/config/apl_hmi_config.h`](../../apl_lib/config/apl_hmi_config.h) 只做人机的编译控制和默认值。主控的 `apl_core_config.h` 不包含面板。
 
 ### 4.1 编译控制
 

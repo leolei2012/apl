@@ -17,9 +17,9 @@
 
 本文定义库对象 `struct apl_core` 的职责：业务判断、执行器输出，以及它交给人机的状态快照。
 
-本仓库是库，库内不创建实例。使用方持有一份 `struct apl`。`src/apl.c` 在里面放 `struct apl_core` 和 `struct apl_hmi`，并完成初始化和按拍推进。两个对象互不包含、也不互相包含头文件，通过 `link_command` 和 `link_snapshot` 交换数据。
+本仓库是库，库内不创建实例。使用方持有一份 `struct apl`。`apl_lib/src/apl.c` 在里面放 `struct apl_core` 和 `struct apl_hmi`，并完成初始化和按拍推进。两个对象互不包含、也不互相包含头文件，通过 `link_command` 和 `link_snapshot` 交换数据。
 
-一套主控逻辑，运行中可动态配置。空气净化与加湿是否启用写在 `apl_core` 的动态配置里，不在编译期分成机型。`config/apl_core_config.h` 只提供编译控制和默认值。
+一套主控逻辑，运行中可动态配置。空气净化与加湿是否启用写在 `apl_core` 的动态配置里，不在编译期分成机型。`apl_lib/config/apl_core_config.h` 只提供编译控制和默认值。
 
 主控负责：
 
@@ -62,7 +62,7 @@ core → link_snapshot → hmi（原样呈现）
 1. 模式、档位、目标湿度、故障是否成立，只在主控判定。
 2. 主控用 `link_snapshot` 报告当前状态，以及动态配置里启用了哪些功能。
 3. 人机发来的命令对应功能未编译或动态配置未启用时，主控拒绝该命令，并在随后的快照中保持原状态。
-4. 命令和快照的类型定义在 [`include/apl_type.h`](../../include/apl_type.h)，主控和人机共用这一份。字段见第 3.2 节，前端规格书第 5、6 节引用同一份定义。
+4. 命令和快照的类型定义在 [`apl_lib/include/apl_type.h`](../../apl_lib/include/apl_type.h)，主控和人机共用这一份。字段见第 3.2 节，前端规格书第 5、6 节引用同一份定义。
 
 ### 3.1 与宿主的边界
 
@@ -100,7 +100,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 ### 3.2 link_command 与 link_snapshot
 
-人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每拍可用 `apl_core_get_snapshot` 取一份 `struct apl_link_snapshot`。`src/apl.c` 在 `apl_tick` 里先推进主控，再把快照交给人机。
+人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每拍可用 `apl_core_get_snapshot` 取一份 `struct apl_link_snapshot`。`apl_lib/src/apl.c` 在 `apl_tick` 里先推进主控，再把快照交给人机。
 
 `struct apl_link_command` 只有两项：`type`（`enum apl_link_command_type`）和 `arg`（`uint8_t`，不用时为 0）。
 
@@ -154,7 +154,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 ## 4. 配置
 
-[`config/apl_core_config.h`](../../config/apl_core_config.h) 只做主控的编译控制和默认值。面板裁剪在人机自己的 [`config/apl_hmi_config.h`](../../config/apl_hmi_config.h)，不写进本文件。本机当前启用哪些功能，以动态配置为准。没有动态配置时，用头文件里的默认值建立第一份。
+[`apl_lib/config/apl_core_config.h`](../../apl_lib/config/apl_core_config.h) 只做主控的编译控制和默认值。面板裁剪在人机自己的 [`apl_lib/config/apl_hmi_config.h`](../../apl_lib/config/apl_hmi_config.h)，不写进本文件。本机当前启用哪些功能，以动态配置为准。没有动态配置时，用头文件里的默认值建立第一份。
 
 ### 4.1 编译控制
 
@@ -214,7 +214,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 已写明的条目可以作为实现依据。标为待定的条目，实现不以推测代替。
 
-整机状态、UV 与负离子开关、风机档位、水位段数的枚举在 [`include/apl_type.h`](../../include/apl_type.h)。人机自己的按键、单位和童锁枚举在 [`include/apl_hmi.h`](../../include/apl_hmi.h)。
+整机状态、UV 与负离子开关、风机档位、水位段数的枚举在 [`apl_lib/include/apl_type.h`](../../apl_lib/include/apl_type.h)。人机自己的按键、单位和童锁枚举在 [`apl_lib/include/apl_hmi.h`](../../apl_lib/include/apl_hmi.h)。
 
 ### 5.1 电器公共行为
 

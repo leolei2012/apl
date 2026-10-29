@@ -69,6 +69,9 @@ QString AplSource::discover()
     {
         QDir dir(start);
         do {
+            QDir library(dir.filePath("apl_lib"));
+            if (QFileInfo::exists(library.filePath("src/apl.c")) && QFileInfo::exists(library.filePath("include/apl.h"))
+                && QFileInfo::exists(library.filePath("config/apl_core_config.h"))) return library.absolutePath();
             if (QFileInfo::exists(dir.filePath("src/apl.c")) && QFileInfo::exists(dir.filePath("include/apl.h"))
                 && QFileInfo::exists(dir.filePath("config/apl_core_config.h"))) return dir.absolutePath();
         } while (dir.cdUp());
