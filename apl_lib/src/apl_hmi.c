@@ -310,6 +310,19 @@ static uint8_t apl_hmi_lamp_forced_off(const struct apl_hmi_state *state, uint8_
         return 1u;
     }
 
+    if (NULL != state->panel.send)
+    {
+        if ((APL_HMI_KEY_PURIFY == index) && (0u == state->panel.snap.uv_enabled)
+            && (0u == state->panel.snap.anion_enabled))
+        {
+            return 1u;
+        }
+        if ((APL_HMI_KEY_HUMIDITY == index) && (0u == state->panel.snap.purify_enabled)
+            && (0u == (state->panel.snap.sensors_configured & APL_SENSOR_HUMIDITY_MASK)))
+        {
+            return 1u;
+        }
+    }
     if ((APL_HMI_KEY_FILTER == index) && (NULL != state->panel.send)
         && ((0u == state->purify_enabled) || (0u != state->humidify_enabled)))
     {
@@ -325,12 +338,12 @@ static void apl_hmi_force_disabled_lamps(struct apl_hmi_state *state) APL_CALL
     {
         state->key[APL_HMI_KEY_FILTER].brightness = 0u;
     }
-    if (0u == state->purify_enabled)
+    if ((0u == state->purify_enabled) || (0u != apl_hmi_lamp_forced_off(state, APL_HMI_KEY_PURIFY)))
     {
         state->key[APL_HMI_KEY_PURIFY].brightness = 0u;
     }
 
-    if (0u == state->humidify_enabled)
+    if ((0u == state->humidify_enabled) || (0u != apl_hmi_lamp_forced_off(state, APL_HMI_KEY_HUMIDITY)))
     {
         state->key[APL_HMI_KEY_HUMIDITY].brightness = 0u;
     }
@@ -1452,8 +1465,17 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
                                                   : APL_LINK_CMD_FAN_CYCLE, 0u);
         break;
     case APL_HMI_KEY_PURIFY:
-        apl_hmi_panel_send(state, (0u != is_long) ? APL_LINK_CMD_WIFI_PAIR
-                                                  : APL_LINK_CMD_PURIFY_TOGGLE, 0u);
+        if (0u != is_long)
+        {
+            if (0u != panel->snap.wifi_enabled)
+            {
+                apl_hmi_panel_send(state, APL_LINK_CMD_WIFI_PAIR, 0u);
+            }
+        }
+        else
+        {
+            apl_hmi_panel_send(state, APL_LINK_CMD_PURIFY_TOGGLE, 0u);
+        }
         break;
     case APL_HMI_KEY_TIMER:
         if (0u != is_long)
@@ -1680,6 +1702,15 @@ static void apl_hmi_panel_draw_ambient(struct apl_hmi_state *state) APL_CALL
     }
 
     state->ambient_brightness = APL_HMI_LAMP_FULL;
+    if (0u == state->panel.snap.aq_ready)
+    {
+        state->ambient_brightness = 0u;
+        state->ambient_red = 0u;
+        state->ambient_green = 0u;
+        state->ambient_blue = 0u;
+        return;
+    }
+
     switch (snap->aq_level)
     {
     case APL_AQ_EXCELLENT:
@@ -1749,6 +1780,18 @@ static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+    if ((0u != snap->purify_enabled) && (0u != (snap->sensor_faults & APL_SENSOR_PM25_MASK)))
+    {
+        apl_hmi_digits_text(state, ' ', 'E', '9');
+        state->digit_unit = APL_HMI_UNIT_NONE;
+        return;
+    }
+    if (0u != snap->sensors_warming)
+    {
+        apl_hmi_digits_text(state, ' ', '-', '-');
+        state->digit_unit = APL_HMI_UNIT_NONE;
+        return;
+    }
     show_humidity = (0u == snap->purify_enabled) ? 1u : 0u;
     if (0u != apl_hmi_panel_combo_model(snap))
     {
@@ -1757,12 +1800,27 @@ static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
 
     if (0u != show_humidity)
     {
-        apl_hmi_digits_number(state, snap->humidity);
+        if (0u != (snap->sensors_ready & APL_SENSOR_HUMIDITY_MASK))
+        {
+            apl_hmi_digits_number(state, snap->humidity);
+        }
+        else
+        {
+            /* 湿度故障E1/E2冲突待确认，不伪造随机湿度或选定故障码。 */
+            apl_hmi_digits_text(state, ' ', '-', '-');
+        }
         state->digit_unit = APL_HMI_UNIT_PERCENT;
     }
     else
     {
-        apl_hmi_digits_number(state, snap->pm25);
+        if (0u != (snap->sensors_ready & APL_SENSOR_PM25_MASK))
+        {
+            apl_hmi_digits_number(state, snap->pm25);
+        }
+        else
+        {
+            apl_hmi_digits_text(state, ' ', '-', '-');
+        }
         state->digit_unit = APL_HMI_UNIT_PM25;
     }
 }
@@ -1837,6 +1895,7 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
     state->icon[APL_HMI_ICON_UV] = apl_hmi_on(APL_SWITCH_ON == snap->uv);
     state->icon[APL_HMI_ICON_HUMIDITY] =
         apl_hmi_on((0u != snap->humidify_on)
+                   && (0u != (snap->sensors_ready & APL_SENSOR_HUMIDITY_MASK))
                    && (APL_HUMIDITY_TARGET_OFF != snap->humidity_target));
     apl_hmi_panel_draw_filter(state);
     apl_hmi_panel_draw_water(state);

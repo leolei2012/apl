@@ -215,4 +215,12 @@
 #error "APL_COMPILE_SENSOR_HUMIDITY requires APL_COMPILE_HUMIDIFY"
 #endif
 
+/** 无有效闭环输入的备用实际档位。缺省沿用旧纯加湿备用二档，项目须确认。 */
+#ifndef APL_CORE_SENSOR_FALLBACK_GEAR
+#define APL_CORE_SENSOR_FALLBACK_GEAR 2u
+#endif
+#if (APL_CORE_SENSOR_FALLBACK_GEAR > 3u)
+#error "APL_CORE_SENSOR_FALLBACK_GEAR must be a physical sleep/1/2/3 gear"
+#endif
+
 #endif /* APL_CORE_CONFIG_H */

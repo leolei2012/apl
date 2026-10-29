@@ -1158,9 +1158,9 @@ static void test_humidify_auto_bands(void)
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_POWER, 0u));
     EXPECT(APL_LINK_OK == cmd(&machine.core, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_AUTO));
     EXPECT(APL_HUMIDITY_TARGET_OFF == snap_of(&machine.core).humidity_target);
-    /* 默认零值不是已读取的 RH0 样本；第一秒采样前保留原输出。 */
+    /* 默认零值不是RH0样本；预处理期间按开机物理档运行。 */
     apl_tick(&machine);
-    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+    EXPECT((APL_DEFAULT_FAN_GEAR <= 3u ? APL_DEFAULT_FAN_GEAR : APL_CORE_SENSOR_FALLBACK_GEAR) == host.fan_gear);
     beep_seq = snap_of(&machine.core).beep_seq;
     for (pass = 0u; pass < 2u; pass++)
     {
@@ -1235,7 +1235,7 @@ static void test_humidify_auto_bands(void)
     apl_core_power_off(&machine.core);
     apl_core_power_on(&machine.core);
     apl_tick(&machine);
-    EXPECT(APL_FAN_GEAR_2 == host.fan_gear);
+    EXPECT((APL_DEFAULT_FAN_GEAR <= 3u ? APL_DEFAULT_FAN_GEAR : APL_CORE_SENSOR_FALLBACK_GEAR) == host.fan_gear);
     machine_ticks(&machine, TICKS_PER_S + 1u);
     EXPECT(APL_FAN_GEAR_1 == host.fan_gear);
     machine_start(&machine, &host);

@@ -80,6 +80,10 @@ struct APL_CORE_MAY_ALIAS apl_core_state
     uint8_t uv_requested;
     uint8_t anion_requested;
     uint8_t module_faults;
+    uint8_t sensors_ready;
+    uint8_t sensors_warming;
+    uint8_t sensor_faults;
+    uint8_t aq_ready;
     uint8_t humidify_on;
     uint8_t humidity;
     uint8_t humidity_sampled;
@@ -300,62 +304,129 @@ static enum apl_aq_level apl_core_aq_worse(enum apl_aq_level a, enum apl_aq_leve
  * 原表多传感器分级。区间端点归较好的一档（待确认：TVOC 0.3、0.5 两档重叠）。
  * 甲醛没有「良」，0.050 以上直接是中度污染。
  */
+#if (APL_COMPILE_SENSOR_PM25 || APL_COMPILE_SENSOR_PM10 || APL_COMPILE_SENSOR_HCHO || APL_COMPILE_SENSOR_TVOC || APL_COMPILE_SENSOR_HUMIDITY)
+static enum apl_sensor_status apl_core_sensor_state(struct apl_core_state *state,
+                                                     enum apl_sensor sensor,
+                                                     uint8_t available) APL_CALL
+{
+    enum apl_sensor_status status;
+    uint8_t mask;
+
+    if (0u == available)
+    {
+        return APL_SENSOR_ABSENT;
+    }
+    status = APL_SENSOR_VALID;
+    if ((NULL != state->ops) && (NULL != state->ops->get_sensor_status))
+    {
+        status = state->ops->get_sensor_status(sensor, state->ctx);
+        if ((unsigned)status > APL_SENSOR_FAULT)
+        {
+            status = APL_SENSOR_FAULT;
+        }
+    }
+    mask = (uint8_t)(1u << (unsigned)sensor);
+    if (APL_SENSOR_VALID == status)
+    {
+        state->sensors_ready |= mask;
+    }
+    else if (APL_SENSOR_WARMUP == status)
+    {
+        state->sensors_warming |= mask;
+    }
+    else if (APL_SENSOR_FAULT == status)
+    {
+        state->sensor_faults |= mask;
+    }
+    else
+    {
+        /* 未装配不参与空气质量判定，也不伪造有效值。 */
+    }
+    return status;
+}
+#endif
+
 static void apl_core_sensor_sample(struct apl_core_state *state) APL_CALL
 {
     enum apl_aq_level level;
+    uint8_t previous_faults;
+    uint8_t aq_inputs;
 
+    previous_faults = state->sensor_faults;
+    state->sensors_ready = 0u;
+    state->sensors_warming = 0u;
+    state->sensor_faults = 0u;
+    state->aq_ready = 0u;
+    state->humidity_sampled = 0u;
     if (NULL == state->ops)
     {
         return;
     }
-
     if (0u != apl_core_has_purify(state))
     {
         level = APL_AQ_EXCELLENT;
 #if APL_COMPILE_SENSOR_PM25
-        if (NULL != state->ops->get_pm25)
+        if (APL_SENSOR_VALID == apl_core_sensor_state(state, APL_SENSOR_PM25,
+                                                       (uint8_t)(NULL != state->ops->get_pm25)))
         {
             state->pm25 = state->ops->get_pm25(state->ctx);
             level = apl_core_aq_worse(level, apl_core_aq_grade(state->pm25, 35u, 75u, 150u));
         }
 #endif
-
 #if APL_COMPILE_SENSOR_PM10
-        if (NULL != state->ops->get_pm10)
+        if (APL_SENSOR_VALID == apl_core_sensor_state(state, APL_SENSOR_PM10,
+                                                       (uint8_t)(NULL != state->ops->get_pm10)))
         {
-            level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->get_pm10(state->ctx),
-                                                        40u, 70u, 150u));
+            level = apl_core_aq_worse(level, apl_core_aq_grade(state->ops->get_pm10(state->ctx), 40u, 70u, 150u));
         }
 #endif
-
 #if APL_COMPILE_SENSOR_HCHO
-        if (NULL != state->ops->get_hcho)
+        if (APL_SENSOR_VALID == apl_core_sensor_state(state, APL_SENSOR_HCHO,
+                                                       (uint8_t)(NULL != state->ops->get_hcho)))
         {
-            level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->get_hcho(state->ctx),
-                                                        50u, 50u, 80u));
+            level = apl_core_aq_worse(level, apl_core_aq_grade(state->ops->get_hcho(state->ctx), 50u, 50u, 80u));
         }
 #endif
-
 #if APL_COMPILE_SENSOR_TVOC
-        if (NULL != state->ops->get_tvoc)
+        if (APL_SENSOR_VALID == apl_core_sensor_state(state, APL_SENSOR_TVOC,
+                                                       (uint8_t)(NULL != state->ops->get_tvoc)))
         {
-            level = apl_core_aq_worse(level,
-                                      apl_core_aq_grade(state->ops->get_tvoc(state->ctx),
-                                                        300u, 500u, 1000u));
+            level = apl_core_aq_worse(level, apl_core_aq_grade(state->ops->get_tvoc(state->ctx), 300u, 500u, 1000u));
         }
 #endif
-
         state->aq_level = level;
     }
-
 #if APL_COMPILE_SENSOR_HUMIDITY
-    if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops->get_humidity))
+    if ((0u != apl_core_has_humidify(state))
+        && (APL_SENSOR_VALID == apl_core_sensor_state(state, APL_SENSOR_HUMIDITY,
+                                                       (uint8_t)(NULL != state->ops->get_humidity))))
     {
         state->humidity = state->ops->get_humidity(state->ctx);
-        state->humidity_sampled = 1u;
+        if (state->humidity <= 100u)
+        {
+            state->humidity_sampled = 1u;
+        }
+        else
+        {
+            state->sensors_ready &= (uint8_t)~APL_SENSOR_HUMIDITY_MASK;
+            state->sensor_faults |= APL_SENSOR_HUMIDITY_MASK;
+        }
     }
+#endif
+    aq_inputs = (uint8_t)((state->sensors_ready | state->sensors_warming | state->sensor_faults) & 15u);
+    state->aq_ready = ((0u != aq_inputs) && (aq_inputs == (state->sensors_ready & 15u))) ? 1u : 0u;
+    if (0u != (state->sensor_faults & (uint8_t)~previous_faults))
+    {
+        apl_core_beep_unless_sleep(state, APL_BEEP_SHORT);
+    }
+}
+
+static enum apl_fan_gear apl_core_preprocess_gear(void) APL_CALL
+{
+#if (APL_DEFAULT_FAN_GEAR <= 3u)
+    return (enum apl_fan_gear)APL_DEFAULT_FAN_GEAR;
+#else
+    return (enum apl_fan_gear)APL_CORE_SENSOR_FALLBACK_GEAR;
 #endif
 }
 
@@ -398,6 +469,7 @@ static uint8_t apl_core_constant_humidity(const struct apl_core_state *state) AP
 {
     return ((0u != apl_core_has_humidify(state))
             && (0u != state->humidify_on)
+            && (0u != (state->sensors_ready & APL_SENSOR_HUMIDITY_MASK))
             && (APL_HUMIDITY_TARGET_OFF != state->humidity_target)) ? 1u : 0u;
 }
 
@@ -408,7 +480,7 @@ static enum apl_fan_gear apl_core_humidify_auto_gear(const struct apl_core_state
     if ((0u == state->humidity_sampled) || (NULL == state->ops)
         || (NULL == state->ops->get_humidity) || (state->humidity > 100u))
     {
-        return APL_FAN_GEAR_2;
+        return (enum apl_fan_gear)APL_CORE_SENSOR_FALLBACK_GEAR;
     }
 
     if (state->humidity <= 30u)
@@ -436,6 +508,21 @@ static enum apl_fan_gear apl_core_fan_output_compute(const struct apl_core_state
     if ((APL_FAN_GEAR_TURBO == state->fan_gear) || (APL_FAN_GEAR_SLEEP == state->fan_gear))
     {
         return state->fan_gear;
+    }
+
+    if (APL_FAN_GEAR_AUTO == state->fan_gear)
+    {
+        if ((0u != apl_core_has_purify(state)) && (0u == state->aq_ready))
+        {
+            return (0u != (state->sensors_warming & 15u)) ? apl_core_preprocess_gear()
+                                                        : (enum apl_fan_gear)APL_CORE_SENSOR_FALLBACK_GEAR;
+        }
+        if ((0u == apl_core_has_purify(state)) && (0u != apl_core_has_humidify(state))
+            && (0u == (state->sensors_ready & APL_SENSOR_HUMIDITY_MASK)))
+        {
+            return (0u != (state->sensors_warming & APL_SENSOR_HUMIDITY_MASK)) ? apl_core_preprocess_gear()
+                                                                           : (enum apl_fan_gear)APL_CORE_SENSOR_FALLBACK_GEAR;
+        }
     }
 
     if (0u != apl_core_constant_humidity(state))
@@ -603,7 +690,10 @@ static void apl_core_outputs_update(struct apl_core *self) APL_CALL
                     && (APL_WATER_LEVEL_0 != state->water_level)
                     && (APL_FAN_GEAR_TURBO != state->fan_gear)
                     && (0u == state->shortage)
-                    && (0u == state->humidity_hold)) ? APL_SWITCH_ON : APL_SWITCH_OFF;
+                    && (0u == state->humidity_hold)
+                    && ((APL_HUMIDITY_TARGET_OFF == state->humidity_target)
+                        || (0u != (state->sensors_ready & APL_SENSOR_HUMIDITY_MASK))))
+                   ? APL_SWITCH_ON : APL_SWITCH_OFF;
 
     interlock = 0u;
     uv_fault = 0u;
@@ -1011,6 +1101,40 @@ void apl_core_power_on(struct apl_core *self) APL_CALL
     state->power = APL_POWER_ON;
     state->run_state = APL_RUN_ON;
     state->humidity_sampled = 0u;
+    state->sensors_ready = 0u;
+    state->sensor_faults = 0u;
+    state->sensors_warming = 0u;
+    state->aq_ready = 0u;
+#if APL_COMPILE_SENSOR_PM25
+    if ((0u != apl_core_has_purify(state)) && (NULL != state->ops) && (NULL != state->ops->get_pm25))
+    {
+        state->sensors_warming |= APL_SENSOR_PM25_MASK;
+    }
+#endif
+#if APL_COMPILE_SENSOR_PM10
+    if ((0u != apl_core_has_purify(state)) && (NULL != state->ops) && (NULL != state->ops->get_pm10))
+    {
+        state->sensors_warming |= APL_SENSOR_PM10_MASK;
+    }
+#endif
+#if APL_COMPILE_SENSOR_HCHO
+    if ((0u != apl_core_has_purify(state)) && (NULL != state->ops) && (NULL != state->ops->get_hcho))
+    {
+        state->sensors_warming |= APL_SENSOR_HCHO_MASK;
+    }
+#endif
+#if APL_COMPILE_SENSOR_TVOC
+    if ((0u != apl_core_has_purify(state)) && (NULL != state->ops) && (NULL != state->ops->get_tvoc))
+    {
+        state->sensors_warming |= APL_SENSOR_TVOC_MASK;
+    }
+#endif
+#if APL_COMPILE_SENSOR_HUMIDITY
+    if ((0u != apl_core_has_humidify(state)) && (NULL != state->ops) && (NULL != state->ops->get_humidity))
+    {
+        state->sensors_warming |= APL_SENSOR_HUMIDITY_MASK;
+    }
+#endif
     state->dry_left_s = 0u;
     state->factory_done = 0u;
     state->cl_left_s = 0u;
@@ -1539,6 +1663,25 @@ void apl_core_get_snapshot(const struct apl_core *self, struct apl_link_snapshot
     snapshot->factory_done = state->factory_done;
     snapshot->purify_on = state->purify_on;
     snapshot->module_faults = state->module_faults;
+#if APL_COMPILE_SENSOR_PM25
+    snapshot->sensors_configured |= APL_SENSOR_PM25_MASK;
+#endif
+#if APL_COMPILE_SENSOR_PM10
+    snapshot->sensors_configured |= APL_SENSOR_PM10_MASK;
+#endif
+#if APL_COMPILE_SENSOR_HCHO
+    snapshot->sensors_configured |= APL_SENSOR_HCHO_MASK;
+#endif
+#if APL_COMPILE_SENSOR_TVOC
+    snapshot->sensors_configured |= APL_SENSOR_TVOC_MASK;
+#endif
+#if APL_COMPILE_SENSOR_HUMIDITY
+    snapshot->sensors_configured |= APL_SENSOR_HUMIDITY_MASK;
+#endif
+    snapshot->sensors_ready = state->sensors_ready;
+    snapshot->sensors_warming = state->sensors_warming;
+    snapshot->sensor_faults = state->sensor_faults;
+    snapshot->aq_ready = state->aq_ready;
 #if APL_COMPILE_UV
     snapshot->uv_enabled = 1u;
     snapshot->uv_requested = state->uv_requested;

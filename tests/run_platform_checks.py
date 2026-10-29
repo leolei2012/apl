@@ -17,7 +17,7 @@ compiler = os.environ.get('CC') or shutil.which('gcc') or (str(mingw[-1]) if min
 if not compiler:
     raise SystemExit('Existing GCC required; no dependencies installed')
 sources = [ROOT / 'apl_lib/src' / name for name in ['apl.c', 'apl_core.c', 'apl_hmi.c']]
-tests = ['test_apl.c', 'test_link.c', 'test_hmi_key_optional.c', 'test_sdk_release.c', 'test_apl_platform.c', 'test_workbook_keys.c', 'test_workbook_water.c', 'test_workbook_timing.c', 'test_workbook_panel.c', 'test_optional_modules.c', 'test_filter_ratio.c']
+tests = ['test_apl.c', 'test_link.c', 'test_hmi_key_optional.c', 'test_sdk_release.c', 'test_apl_platform.c', 'test_workbook_keys.c', 'test_workbook_water.c', 'test_workbook_timing.c', 'test_workbook_panel.c', 'test_optional_modules.c', 'test_sensor_status.c', 'test_filter_ratio.c']
 paths = [*sources, *sorted((ROOT / 'apl_lib/include').glob('*.h')),
          *sorted((ROOT / 'apl_lib/config').glob('*.h')), *[ROOT / 'tests' / n for n in tests]]
 def hashes():
@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory(prefix='apl-platform-') as directory:
         cases.append(('test_workbook_panel.c', ['-DAPL_HMI_COMPILE_KEY_FILTER=0', '-DAPL_CORE_HAS_TURBO=0'], 'no-filter-key-no-turbo'))
         cases.append(('test_optional_modules.c', ['-DAPL_COMPILE_' + name + '=0' for name in ['UV','ANION','WIFI','SENSOR_PM25','SENSOR_PM10','SENSOR_HCHO','SENSOR_TVOC','SENSOR_HUMIDITY']], 'no-optional-modules'))
         cases.append(('test_optional_modules.c', ['-DAPL_COMPILE_' + name + '=1' for name in ['UV','ANION','WIFI']], 'all-optional-modules'))
+        cases.append(('test_sensor_status.c', ['-DAPL_CORE_SENSOR_FALLBACK_GEAR=3'], 'sensor-fallback-3'))
         for test, extra, name in cases:
             if test == 'test_hmi_key_optional.c':
                 extra += ['-DAPL_HMI_COMPILE_KEY_LIGHT=0']

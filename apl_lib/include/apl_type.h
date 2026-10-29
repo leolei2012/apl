@@ -101,6 +101,28 @@ enum apl_beep
     APL_BEEP_UV_ALARM        /**< UV 联锁断开报警 */
 };
 
+/** 传感器状态由宿主的驱动/通信层确认；库不猜测故障判定时长。 */
+enum apl_sensor
+{
+    APL_SENSOR_PM25 = 0,
+    APL_SENSOR_PM10,
+    APL_SENSOR_HCHO,
+    APL_SENSOR_TVOC,
+    APL_SENSOR_HUMIDITY
+};
+enum apl_sensor_status
+{
+    APL_SENSOR_ABSENT = 0,
+    APL_SENSOR_WARMUP,
+    APL_SENSOR_VALID,
+    APL_SENSOR_FAULT
+};
+#define APL_SENSOR_PM25_MASK       1u
+#define APL_SENSOR_PM10_MASK       2u
+#define APL_SENSOR_HCHO_MASK       4u
+#define APL_SENSOR_TVOC_MASK       8u
+#define APL_SENSOR_HUMIDITY_MASK   16u
+
 /** 可选模块，故障值由宿主校验和消抖后提供；不规定板间协议。 */
 enum apl_module
 {
@@ -191,6 +213,11 @@ struct apl_link_snapshot
     uint8_t uv_requested;
     uint8_t anion_requested;
     uint8_t module_faults;             /**< bit0 UV，bit1负离子，bit2 Wi-Fi；由宿主故障输入提供。 */
+    uint8_t sensors_configured;        /**< 编译配置的传感器能力，不代表数据已有效。 */
+    uint8_t sensors_ready;             /**< APL_SENSOR_*_MASK */
+    uint8_t sensors_warming;
+    uint8_t sensor_faults;
+    uint8_t aq_ready;                  /**< 空气质量闭环所用输入均有效且至少有一项。 */
 };
 
 /**

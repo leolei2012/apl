@@ -58,7 +58,10 @@ struct apl_core_ops
     void (*set_pump)(enum apl_switch state, void *ctx) APL_CALL;  /**< 水泵与雾化等加湿负载 */
     void (*memory_save)(const struct apl_core_memory *memory, void *ctx) APL_CALL;
     uint8_t (*get_module_fault)(enum apl_module module, void *ctx) APL_CALL;
-    /**< 宿主已判定故障：0正常，非0故障。NULL表示无该故障反馈，不能据此宣称已检测。 */
+    /**< 宿主已判定故障：0正常，非0故障。NULL表示无反馈，不能据此宣称已检测。 */
+    enum apl_sensor_status (*get_sensor_status)(enum apl_sensor sensor, void *ctx) APL_CALL;
+    /**< NULL兼容旧宿主：已有数值回调视为有效，缺失回调为ABSENT；RH>100仍无效。
+     * 新宿主应显式提供状态，预处理/通信故障阈值在驱动中判定。 */
 };
 
 /** 占位对象。使用方声明它来持有实例，不读写 storage。 */

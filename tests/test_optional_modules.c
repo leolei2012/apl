@@ -86,6 +86,24 @@ int main(void)
         assert(APL_SWITCH_OFF == snapshot(&self).uv);
     }
 #endif
+    {
+        struct apl bundle;
+        apl_init(&bundle, &ops, &host, NULL, NULL); apl_link_bind(&bundle);
+        apl_core_power_on(&bundle.core);
+        {
+            unsigned n;
+            for (n = 0u; n < 210u; n++) { apl_tick(&bundle); }
+        }
+#if !APL_COMPILE_UV && !APL_COMPILE_ANION
+        assert(0u == apl_hmi_get_key_lamp(&bundle.hmi, APL_HMI_KEY_PURIFY));
+#endif
+#if !APL_COMPILE_SENSOR_HUMIDITY && !APL_COMPILE_PURIFY
+        assert(0u == apl_hmi_get_key_lamp(&bundle.hmi, APL_HMI_KEY_HUMIDITY));
+#endif
+#if !APL_COMPILE_WIFI
+        assert(0u == apl_hmi_get_icon(&bundle.hmi, APL_HMI_ICON_WIFI));
+#endif
+    }
     puts("PASS: independent module requests, compile gates, sensor reads, missing UV interlock, host faults and memory requests");
     return 0;
 }
