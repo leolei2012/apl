@@ -132,13 +132,16 @@ export class CSourceTemplate implements TemplateProvider {
     files.set('port/apl_port.h', bytes(text(files.get('port/apl_port.h')!).replace('#include "apl.h"', '#include "apl_product.h"')))
     files.set('product.apl.json', bytes(JSON.stringify(definition, null, 2) + '\n'))
     files.set('metadata/template.json', bytes(JSON.stringify(this.descriptor, null, 2) + '\n'))
-    files.set('verification/smoke.c', bytes(this.smoke(definition)))
+    const consumer = safeRelative(this.descriptor.verification?.consumer ?? 'verification/smoke.c')
+    if (consumer === 'verification/smoke.c') files.set(consumer, bytes(this.smoke(definition)))
+    else if (!files.has(consumer)) throw new Error('模板缺少声明的消费验证程序：' + consumer)
+    else files.set(consumer, bytes('#include "apl_product.h"\n' + this.configurationAssertions(definition).join('\n') + '\n' + text(files.get(consumer)!)))
     files.set('README.md', bytes(this.readme(definition)))
-    files.set('CMakeLists.txt', bytes(text(files.get('CMakeLists.txt')!) + '\ninclude(CTest)\nif(BUILD_TESTING)\n  add_executable(apl_sdk_smoke verification/smoke.c)\n  target_link_libraries(apl_sdk_smoke PRIVATE apl)\n  add_test(NAME apl_sdk_smoke COMMAND apl_sdk_smoke)\nendif()\n'))
+    files.set('CMakeLists.txt', bytes(text(files.get('CMakeLists.txt')!) + `\ninclude(CTest)\nif(BUILD_TESTING)\n  add_executable(apl_sdk_smoke ${consumer})\n  target_link_libraries(apl_sdk_smoke PRIVATE apl)\n  add_test(NAME apl_sdk_smoke COMMAND apl_sdk_smoke)\nendif()\n`))
     return files
   }
-  private smoke(definition: Definition): string {
-    const prefix = 'apl_' + definition.code, enabled = new Set(definition.functions.map(f => f.key))
+  private configurationAssertions(definition: Definition): string[] {
+    const enabled = new Set(definition.functions.map(f => f.key))
     const assertions: string[] = []
     for (const feature of this.descriptor.features) {
       for (const binding of feature.enabledBindings ?? []) assertions.push(`_Static_assert(${binding.macro} == ${Number(enabled.has(feature.key))}u, "feature ${feature.key}");`)
@@ -146,6 +149,11 @@ export class CSourceTemplate implements TemplateProvider {
       if (feature.defaultBinding && field) assertions.push(`_Static_assert(${feature.defaultBinding.macro} == ${Number(field.default)}u, "default ${feature.key}");`)
     }
     for (const p of this.descriptor.parameters) if (p.binding && activeFor(p.requires, enabled)) assertions.push(`_Static_assert(${p.binding.macro} == ${Number(definition.parameters.find(value => value.key === p.key)!.value)}u, "parameter ${p.key}");`)
+    return assertions
+  }
+  private smoke(definition: Definition): string {
+    const prefix = 'apl_' + definition.code, enabled = new Set(definition.functions.map(f => f.key))
+    const assertions = this.configurationAssertions(definition)
     const fan = definition.functions.find(f => f.key === 'fan_speed')!.default
     return `#include "apl_product.h"\n#include <assert.h>\n#include <stdio.h>\n${assertions.join('\n')}\nstatic int fan_on;\nstatic enum apl_water_level water(void *ctx) { (void)ctx; return APL_WATER_LEVEL_3; }\nstatic uint16_t pm(void *ctx) { (void)ctx; return 12u; }\nstatic uint8_t humidity(void *ctx) { (void)ctx; return 45u; }\nstatic uint8_t interlock(void *ctx) { (void)ctx; return 1u; }\nstatic void fan(enum apl_switch on, enum apl_fan_gear gear, void *ctx) { (void)gear; (void)ctx; fan_on = on == APL_SWITCH_ON; }\nint main(void) {\n  ${prefix}_t self;\n  static struct apl_core_ops ops;\n  struct apl_link_snapshot s;\n  ops.get_water_level=water; ops.get_pm25=pm; ops.get_humidity=humidity; ops.get_uv_interlock=interlock; ops.set_fan=fan;\n  ${prefix}_init(&self,&ops,0,0,0);\n  assert(${prefix}_set_power(&self,true));\n  for (unsigned i=0;i<201u;i++) ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  assert(s.run_state == APL_RUN_ON && fan_on);\n  assert(s.purify_enabled == ${Number(enabled.has('purify'))} && s.humidify_enabled == ${Number(enabled.has('humidify'))});\n  assert((int)${prefix}_get_fan_speed(&self) == ${Number(fan)});\n  ${enabled.has('pm25') ? `assert(${prefix}_get_pm25(&self) == 12);` : ''}\n  ${enabled.has('humidity') ? `assert(${prefix}_get_humidity(&self) == 45);` : ''}\n  assert(${prefix}_set_power(&self,false));\n  ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  ${enabled.has('humidify') ? `assert(s.run_state == APL_RUN_DRY && s.dry_left_s > 0u);\n  assert(${prefix}_set_power(&self,true));\n  ${prefix}_tick(&self);\n  apl_core_get_snapshot(&self.core,&s);\n  assert(s.run_state == APL_RUN_ON && s.dry_left_s == 0u);` : 'assert(s.run_state == APL_RUN_STANDBY);'}\n  puts("APL SDK configuration, power, fan and dry recovery verified");\n  return 0;\n}\n`
   }

@@ -8,7 +8,7 @@
 #include <stddef.h>
 
 _Static_assert(APL_CORE_TICK_MS == APL_HMI_TICK_MS, "主控和人机使用同一拍长");
-_Static_assert(APL_VERSION_NUM == 0x000100u, "版本号与分段宏不一致");
+_Static_assert(APL_VERSION_NUM == 0x000101u, "版本号与分段宏不一致");
 _Static_assert(sizeof(struct apl) == sizeof(struct apl_core) + sizeof(struct apl_hmi),
                "组合对象中间不插入填充");
 

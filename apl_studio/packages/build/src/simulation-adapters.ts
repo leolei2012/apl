@@ -16,7 +16,7 @@ const slot = (key: string, name: string, boolean = false, unit?: string): Simula
 const gears = ['睡眠', '一档', '二档', '三档', '自动', '极速'].map((label, value) => ({ value, label }))
 const gear = (key: string, name: string): SimulationSlot => ({ key, name, options: gears })
 export const airCareSimulation: SimulationAdapter = {
-  supports: t => t.engine === 'apl-air-care-v1' && t.sourceVersion === '0.1.0',
+  supports: t => t.engine === 'apl-air-care-v1' && ['0.1.0', '0.1.1'].includes(t.sourceVersion),
   sourceDirectories: ['src'], includeDirectories: ['include', 'config'],
   inputCodes: { Purify: 0, Humidity: 1, Timer: 2, Light: 3, Speed: 4, Power: 5, humidity: 100, pm25: 101, water_level: 102, uv_interlock: 103 },
   source: d => runner('air-care', 'apl_' + d.code),

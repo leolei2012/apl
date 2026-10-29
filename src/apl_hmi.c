@@ -43,7 +43,7 @@ _Static_assert(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_HMI_
                "上电全灯 2 秒");
 _Static_assert(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
 _Static_assert(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
-_Static_assert(APL_HMI_VERSION_NUM == 0x000100u, "版本号与分段宏不一致");
+_Static_assert(APL_HMI_VERSION_NUM == 0x000101u, "版本号与分段宏不一致");
 _Static_assert(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
 
 struct apl_hmi_key

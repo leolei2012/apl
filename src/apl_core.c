@@ -18,7 +18,7 @@
 #endif
 
 _Static_assert(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-_Static_assert(APL_CORE_VERSION_NUM == 0x000100u, "版本号与分段宏不一致");
+_Static_assert(APL_CORE_VERSION_NUM == 0x000101u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u
