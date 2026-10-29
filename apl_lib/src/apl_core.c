@@ -18,7 +18,7 @@
 #endif
 
 APL_STATIC_ASSERT(APL_CORE_TICKS_PER_SECOND == 100u, "10 ms 一拍时，1 秒是 100 拍");
-APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000200u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_CORE_VERSION_NUM == 0x000201u, "版本号与分段宏不一致");
 
 /** 一小时的秒数。面板按小时设置定时。 */
 #define APL_CORE_HOUR_S             3600u

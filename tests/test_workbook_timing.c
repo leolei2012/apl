@@ -39,6 +39,7 @@ int main(void)
     command(&self, APL_LINK_CMD_FAN_SET, APL_FAN_GEAR_SLEEP);
     ticks(&self, 499u); assert(255u == apl_hmi_get_digits_brightness(&self.hmi));
     ticks(&self, 1u); assert(0u == apl_hmi_get_digits_brightness(&self.hmi));
+    assert(255u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_GEAR_SLEEP));
     host.keys.speed = APL_HMI_KEY_PRESSED; ticks(&self, 5u);
     host.keys.speed = APL_HMI_KEY_RELEASED; ticks(&self, 1u);
     assert(255u == apl_hmi_get_digits_brightness(&self.hmi));

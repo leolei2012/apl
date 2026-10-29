@@ -43,7 +43,7 @@ APL_STATIC_ASSERT(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_H
                "上电全灯 2 秒");
 APL_STATIC_ASSERT(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
 APL_STATIC_ASSERT(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
-APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000200u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000201u, "版本号与分段宏不一致");
 APL_STATIC_ASSERT(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
 
 struct apl_hmi_key
@@ -1845,6 +1845,11 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
 
     if (0u != apl_hmi_panel_dark(state))
     {
+        /* All three Sleep rows retain the Sleep indicator; other lamp policy is unchanged. */
+        if (0u != snap->sleep)
+        {
+            state->icon[APL_HMI_ICON_GEAR_SLEEP] = APL_HMI_LAMP_FULL;
+        }
         return;
     }
 

@@ -1,9 +1,9 @@
-/** APL 0.2.0 SDK consumer. Frozen with the release from the root regression source. */
+/** APL 0.2.1 SDK consumer. Frozen with the release from the root regression source. */
 #include "apl.h"
 #include <assert.h>
 #include <stdio.h>
 
-_Static_assert(APL_VERSION_NUM == 0x000200u, "APL release version");
+_Static_assert(APL_VERSION_NUM == 0x000201u, "APL release version");
 _Static_assert(APL_CORE_VERSION_NUM == APL_VERSION_NUM, "core release version");
 _Static_assert(APL_HMI_VERSION_NUM == APL_VERSION_NUM, "HMI release version");
 
@@ -63,7 +63,7 @@ int main(void)
     }
     ticks(&self, APL_HMI_IDLE_TICKS + 1u);
     assert(apl_hmi_get_digits_brightness(&self.hmi) == APL_HMI_LAMP_FULL);
-    puts("APL 0.2.0 pure auto boundaries and Auto/sleep semantics verified");
+    puts("APL 0.2.1 pure auto boundaries and Auto/sleep semantics verified");
 #endif
 
     set_gear(&self, APL_FAN_GEAR_2);
@@ -71,6 +71,6 @@ int main(void)
     host.pm25 = UINT16_MAX; ticks(&self, 101u); assert(host.gear == APL_FAN_GEAR_2);
     apl_core_get_snapshot(&self.core, &snapshot);
     assert(snapshot.sleep == 0u);
-    puts("APL 0.2.0 C11 SDK consumer verified");
+    puts("APL 0.2.1 C11 SDK consumer verified");
     return 0;
 }
