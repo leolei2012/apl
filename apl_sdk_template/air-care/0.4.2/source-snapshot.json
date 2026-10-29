@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "templateVersion": "0.4.2",
+  "sourceVersion": "0.2.2",
+  "sourceCommit": "cbb9eb44cb698819c62f615fcaba99bed2b9a4e0",
+  "rootFiles": {
+    "src/apl.c": "fbfed0f2d465cbafcf8eb88b54e09db18536f96fd7cd48f32fccd9ce1c244c16",
+    "src/apl_core.c": "d5ebfaf085b02c7dc806e65ffe9514ee8ecca8de4cf47c654ea2beec5322613f",
+    "src/apl_hmi.c": "f93b951c6974214c1a9241c557a33c59468cf4f0e9dbc9c225602b5fa5680618",
+    "include/apl.h": "ee0a8b2486d68ef09b728d6d56c8e9df709f665025901d8895e90b107b1e11e8",
+    "include/apl_core.h": "403ffb51f20a662f7fe86281f1ea6d0f5b6233880b400300ca70d6b76c8757bf",
+    "include/apl_hmi.h": "0b3757563b707fe5b2b25bf8b0cc8d432a048028467323465c75ac826d982f52",
+    "include/apl_platform.h": "b31d33afbb7cd5e909bf86d38804ecedcf79c8cb191460d2d97bfd4c96752e15",
+    "include/apl_type.h": "6e19a5cb57d90a151e69fa9d4f78bdc8a1684d6e9c44fe1c313631318a79c589",
+    "config/apl_core_config.h": "bac17825f34a8b7eb711bb96df4806e1b1d09eebe741a63c2616df1d7d86917a",
+    "config/apl_hmi_config.h": "540e6f6bffa13ca8a39cc3efa20f48b65569fb2b06c2dcf98027537b8c197237"
+  },
+  "validationSource": {
+    "path": "tests/test_sdk_release.c",
+    "sha256": "d8ae64b7546b8cacb4dbcc07ea31bc0afbe6ff14a7b99ae7b6d7eec8061b1941"
+  },
+  "sdkConsumer": {
+    "path": "verification/consumer.c",
+    "sha256": "4ba391b984773798e372f1fef749a1912f9df7d1dd7c703d5472697a054661a5",
+    "adaptation": "PM25 boundary checks only when selected"
+  },
+  "memoryConsumer": {
+    "path": "verification/memory_cadence.c",
+    "sha256": "b59ebe7ca1005d53f61034a903cf6bc186b23c2d7f2fb891cbe24e4c8479c009"
+  },
+  "previousTemplate": "0.4.1",
+  "changeScope": "Only ignore disabled counters in periodic memory notifications; no NVM layout or hardware implementation"
+}

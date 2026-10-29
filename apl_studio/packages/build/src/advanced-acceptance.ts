@@ -31,7 +31,7 @@ export async function advancedAcceptance(product: Product, act: Act, check: Chec
   check('睡眠4秒仍显示', { sleep: 1, brightness: 255 }, { sleep: s.internal.sleep, brightness: s.display.brightness }, s)
   await advance(1100)
   check('睡眠独立5秒熄屏', { brightness: 0 }, { brightness: s.display.brightness }, s)
-  if (product.definition.template?.version === '0.4.1') check('睡眠熄屏后保留Sleep灯（三机型共同要求）', { sleepLamp: 255 }, { sleepLamp: s.display.icon_8 }, s)
+  if (['0.4.1','0.4.2'].includes(product.definition.template?.version ?? '')) check('睡眠熄屏后保留Sleep灯（三机型共同要求）', { sleepLamp: 255 }, { sleepLamp: s.display.icon_8 }, s)
   await input('Speed','short')
   check('睡眠首次非电源键只唤醒', { gear: 0, brightness: 255 }, { gear: s.internal.fan_speed, brightness: s.display.brightness }, s)
   await select(1); await input('Speed','long')

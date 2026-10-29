@@ -1,0 +1,798 @@
+{
+  "formatVersion": 1,
+  "id": "apl.air-care",
+  "version": "0.4.2",
+  "name": "净化加湿标准方案：选配与输入状态",
+  "description": "三能力组合、独立UV/负离子/Wi-Fi和传感器配置；明确输入状态、定时/面板验收。未决规则、物理适配与故障判定参数仍需确认。 补丁：睡眠熄屏后保留Sleep指示灯；其他灯位冲突仍待确认。 周期保存通知跳过未启用计数，未设计真实NVM。",
+  "definitionSchemaVersion": 1,
+  "sourceVersion": "0.2.2",
+  "features": [
+    {
+      "key": "power",
+      "name": "电源",
+      "description": "运行时按泵输出历史决定风干；风干中再次开机恢复运行。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_power",
+        "key": "power",
+        "name": "电源",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "required": true
+    },
+    {
+      "key": "fan_speed",
+      "name": "风机档位",
+      "description": "风机档位",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_fan_speed",
+        "key": "fan_speed",
+        "name": "风机档位",
+        "description": "",
+        "kind": "enum",
+        "access": "readwrite",
+        "default": 1,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": [
+          {
+            "label": "睡眠",
+            "value": 0
+          },
+          {
+            "label": "一档",
+            "value": 1
+          },
+          {
+            "label": "二档",
+            "value": 2
+          },
+          {
+            "label": "三档",
+            "value": 3
+          },
+          {
+            "label": "自动",
+            "value": 4
+          },
+          {
+            "label": "极速",
+            "value": 5
+          }
+        ]
+      },
+      "required": true,
+      "defaultBinding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_DEFAULT_FAN_GEAR"
+      }
+    },
+    {
+      "key": "purify",
+      "name": "净化",
+      "description": "净化复合功能开关，控制 UV 与负离子；硬件 UV 受安全联锁控制。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_purify",
+        "key": "purify",
+        "name": "净化",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_PURIFY"
+        },
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_DEFAULT_PURIFY"
+        }
+      ]
+    },
+    {
+      "key": "humidify",
+      "name": "加湿",
+      "description": "加湿开关，包含缺水保护、恒湿和关机风干。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_humidify",
+        "key": "humidify",
+        "name": "加湿",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": true,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_HUMIDIFY"
+        },
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_DEFAULT_HUMIDIFY"
+        }
+      ]
+    },
+    {
+      "key": "humidity",
+      "name": "环境湿度",
+      "description": "实际值由 get_humidity 硬件回调提供；默认值仅用于数据模型预览。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_humidity",
+        "key": "humidity",
+        "name": "环境湿度",
+        "description": "",
+        "kind": "int",
+        "access": "read",
+        "default": 55,
+        "unit": "%",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "humidify"
+      ],
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_SENSOR_HUMIDITY"
+        }
+      ]
+    },
+    {
+      "key": "pm25",
+      "name": "PM2.5",
+      "description": "实际值由 get_pm25 硬件回调提供，单位 μg/m³。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_pm25",
+        "key": "pm25",
+        "name": "PM2.5",
+        "description": "",
+        "kind": "int",
+        "access": "read",
+        "default": 28,
+        "unit": "μg/m³",
+        "min": 0,
+        "max": 65535,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "purify"
+      ],
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_SENSOR_PM25"
+        }
+      ]
+    },
+    {
+      "key": "drying",
+      "name": "风干状态",
+      "description": "只读关机风干状态，实际行为由 APL 执行。",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_drying",
+        "key": "drying",
+        "name": "风干状态",
+        "description": "",
+        "kind": "bool",
+        "access": "read",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "humidify"
+      ]
+    },
+    {
+      "key": "uv",
+      "name": "UV模块",
+      "description": "UV模块",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_uv",
+        "key": "uv",
+        "name": "UV模块",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_UV"
+        }
+      ]
+    },
+    {
+      "key": "anion",
+      "name": "负离子模块",
+      "description": "负离子模块",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_anion",
+        "key": "anion",
+        "name": "负离子模块",
+        "description": "",
+        "kind": "bool",
+        "access": "readwrite",
+        "default": false,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_ANION"
+        }
+      ]
+    },
+    {
+      "key": "wifi",
+      "name": "Wi-Fi模块",
+      "description": "Wi-Fi模块",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_wifi",
+        "key": "wifi",
+        "name": "Wi-Fi模块",
+        "description": "",
+        "kind": "enum",
+        "access": "read",
+        "default": 0,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": [
+          {
+            "label": "未连接",
+            "value": 0
+          },
+          {
+            "label": "配网中",
+            "value": 1
+          },
+          {
+            "label": "已连接",
+            "value": 2
+          }
+        ]
+      },
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_WIFI"
+        }
+      ]
+    },
+    {
+      "key": "sensor_pm10",
+      "name": "PM10输入",
+      "description": "PM10输入",
+      "enabledByDefault": false,
+      "definition": {
+        "id": "template_sensor_pm10",
+        "key": "sensor_pm10",
+        "name": "PM10输入",
+        "description": "",
+        "kind": "bool",
+        "access": "read",
+        "default": true,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "purify"
+      ],
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_SENSOR_PM10"
+        }
+      ]
+    },
+    {
+      "key": "sensor_hcho",
+      "name": "甲醛输入",
+      "description": "甲醛输入",
+      "enabledByDefault": false,
+      "definition": {
+        "id": "template_sensor_hcho",
+        "key": "sensor_hcho",
+        "name": "甲醛输入",
+        "description": "",
+        "kind": "bool",
+        "access": "read",
+        "default": true,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "purify"
+      ],
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_SENSOR_HCHO"
+        }
+      ]
+    },
+    {
+      "key": "sensor_tvoc",
+      "name": "TVOC输入",
+      "description": "TVOC输入",
+      "enabledByDefault": false,
+      "definition": {
+        "id": "template_sensor_tvoc",
+        "key": "sensor_tvoc",
+        "name": "TVOC输入",
+        "description": "",
+        "kind": "bool",
+        "access": "read",
+        "default": true,
+        "unit": "",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "requires": [
+        "purify"
+      ],
+      "enabledBindings": [
+        {
+          "path": "config/apl_core_config.h",
+          "macro": "APL_COMPILE_SENSOR_TVOC"
+        }
+      ]
+    },
+    {
+      "key": "sensor_ready",
+      "name": "有效输入标记",
+      "description": "有效输入标记",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_sensor_ready",
+        "key": "sensor_ready",
+        "name": "有效输入标记",
+        "description": "",
+        "kind": "int",
+        "access": "read",
+        "default": 0,
+        "unit": "",
+        "min": 0,
+        "max": 31,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "required": true
+    },
+    {
+      "key": "sensor_faults",
+      "name": "传感器故障标记",
+      "description": "传感器故障标记",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_sensor_faults",
+        "key": "sensor_faults",
+        "name": "传感器故障标记",
+        "description": "",
+        "kind": "int",
+        "access": "read",
+        "default": 0,
+        "unit": "",
+        "min": 0,
+        "max": 31,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "required": true
+    },
+    {
+      "key": "module_faults",
+      "name": "模块故障标记",
+      "description": "模块故障标记",
+      "enabledByDefault": true,
+      "definition": {
+        "id": "template_module_faults",
+        "key": "module_faults",
+        "name": "模块故障标记",
+        "description": "",
+        "kind": "int",
+        "access": "read",
+        "default": 0,
+        "unit": "",
+        "min": 0,
+        "max": 7,
+        "step": 1,
+        "maxLength": 64,
+        "options": []
+      },
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "tick_ms",
+      "name": "业务推进周期",
+      "description": "当前 APL C 库固定每 10 ms 推进一次。",
+      "kind": "int",
+      "default": 10,
+      "min": 10,
+      "max": 10,
+      "step": 1,
+      "unit": "ms"
+    },
+    {
+      "key": "filter_life_h",
+      "name": "滤芯寿命",
+      "description": "影响滤芯累计时长与维护提醒。",
+      "kind": "int",
+      "default": 2200,
+      "min": 1,
+      "max": 1000000,
+      "step": 1,
+      "unit": "小时",
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_FILTER_LIFE_H"
+      }
+    },
+    {
+      "key": "dry_seconds",
+      "name": "风干时长",
+      "description": "加湿机型关机后，风机继续运行的时长。",
+      "kind": "int",
+      "default": 3600,
+      "min": 1,
+      "max": 86400,
+      "step": 1,
+      "unit": "秒",
+      "requires": [
+        "humidify"
+      ],
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_DRY_S"
+      }
+    },
+    {
+      "key": "dry_fan_gear",
+      "name": "风干档位",
+      "description": "关机风干期间的实际输出档位。",
+      "kind": "enum",
+      "default": 1,
+      "options": [
+        {
+          "label": "一档",
+          "value": 1
+        },
+        {
+          "label": "二档",
+          "value": 2
+        },
+        {
+          "label": "三档",
+          "value": 3
+        }
+      ],
+      "requires": [
+        "humidify"
+      ],
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_DRY_FAN_GEAR"
+      }
+    },
+    {
+      "key": "humidity_hysteresis",
+      "name": "恒湿回差",
+      "description": "低于目标湿度相应百分点后恢复加湿。",
+      "kind": "int",
+      "default": 3,
+      "min": 1,
+      "max": 20,
+      "step": 1,
+      "unit": "百分点",
+      "requires": [
+        "humidity"
+      ],
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_HUMIDITY_HYSTERESIS"
+      }
+    },
+    {
+      "key": "turbo_enabled",
+      "name": "风速键长按进入极速",
+      "description": "开启时长按3秒进入/退出极速；关闭时长按不改变档位，短按循环保持不变。",
+      "kind": "bool",
+      "default": true,
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_HAS_TURBO"
+      }
+    },
+    {
+      "key": "sensor_fallback_gear",
+      "name": "传感器无效时备用档（项目确认）",
+      "description": "缺省二档仅延续旧加湿缺省；项目必须确认。预处理期间使用开机物理档。",
+      "kind": "enum",
+      "default": 2,
+      "options": [
+        {
+          "label": "睡眠风速",
+          "value": 0
+        },
+        {
+          "label": "一档",
+          "value": 1
+        },
+        {
+          "label": "二档",
+          "value": 2
+        },
+        {
+          "label": "三档",
+          "value": 3
+        }
+      ],
+      "binding": {
+        "path": "config/apl_core_config.h",
+        "macro": "APL_CORE_SENSOR_FALLBACK_GEAR"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "key": "get_key_state",
+      "name": "六键采样",
+      "signature": "void get_key_state(struct apl_hmi_key_state *state, void *ctx)",
+      "description": "提供已消抖的六键电平。",
+      "required": true,
+      "requires": []
+    },
+    {
+      "key": "set_fan",
+      "name": "风机输出",
+      "signature": "void set_fan(enum apl_switch state, enum apl_fan_gear gear, void *ctx)",
+      "description": "将输出档位映射到本项目的风机驱动。",
+      "required": true,
+      "requires": []
+    },
+    {
+      "key": "get_pm25",
+      "name": "空气质量采样",
+      "signature": "uint16_t get_pm25(void *ctx)",
+      "description": "返回 PM2.5 整数 μg/m³。",
+      "required": true,
+      "requires": [
+        "pm25"
+      ]
+    },
+    {
+      "key": "get_uv_interlock",
+      "name": "UV 安全联锁",
+      "signature": "uint8_t get_uv_interlock(void *ctx)",
+      "description": "闭合返回 1，未接线时禁止 UV。",
+      "required": true,
+      "requires": [
+        "uv"
+      ]
+    },
+    {
+      "key": "set_uv",
+      "name": "UV 输出",
+      "signature": "void set_uv(enum apl_switch state, void *ctx)",
+      "description": "实现受安全联锁控制的 UV 输出。",
+      "required": true,
+      "requires": [
+        "uv"
+      ]
+    },
+    {
+      "key": "set_anion",
+      "name": "负离子输出",
+      "signature": "void set_anion(enum apl_switch state, void *ctx)",
+      "description": "实现负离子开关。",
+      "required": true,
+      "requires": [
+        "anion"
+      ]
+    },
+    {
+      "key": "get_water_level",
+      "name": "水位采样",
+      "signature": "enum apl_water_level get_water_level(void *ctx)",
+      "description": "返回 0–4 段，0 表示缺水。",
+      "required": true,
+      "requires": [
+        "humidify"
+      ]
+    },
+    {
+      "key": "get_humidity",
+      "name": "湿度采样",
+      "signature": "uint8_t get_humidity(void *ctx)",
+      "description": "返回 0–100% 的实际环境湿度。",
+      "required": true,
+      "requires": [
+        "humidity"
+      ]
+    },
+    {
+      "key": "set_pump",
+      "name": "加湿负载输出",
+      "signature": "void set_pump(enum apl_switch state, void *ctx)",
+      "description": "实现水泵或雾化负载。",
+      "required": true,
+      "requires": [
+        "humidify"
+      ]
+    },
+    {
+      "key": "set_buzzer",
+      "name": "蜂鸣器输出",
+      "signature": "void set_buzzer(uint8_t on, void *ctx)",
+      "description": "按需实现面板提示音。",
+      "required": false,
+      "requires": []
+    },
+    {
+      "key": "memory_save",
+      "name": "记忆保存",
+      "signature": "void memory_save(const struct apl_core_memory *memory, void *ctx)",
+      "description": "按字段编码并带版本与校验保存，初始化后显式恢复。",
+      "required": false,
+      "requires": []
+    },
+    {
+      "key": "get_sensor_status",
+      "name": "传感器输入状态",
+      "signature": "enum apl_sensor_status get_sensor_status(enum apl_sensor sensor, void *ctx)",
+      "description": "驱动缓存ABSENT/WARMUP/VALID/FAULT；开短路、超时和持续越界阈值由项目确认。启用传感器时应显式实现，不能把占位值当有效样本。",
+      "required": false
+    },
+    {
+      "key": "get_module_fault",
+      "name": "模块故障反馈",
+      "signature": "uint8_t get_module_fault(enum apl_module module, void *ctx)",
+      "description": "宿主已确认故障，0正常非0故障。NULL表示未提供反馈，不代表已检测；板间协议和消抖参数待项目定义。",
+      "required": false
+    },
+    {
+      "key": "get_pm10",
+      "name": "PM10输入",
+      "requires": [
+        "sensor_pm10"
+      ],
+      "signature": "uint16_t get_pm10(void *ctx)",
+      "required": true,
+      "description": "整数μg/m³，传感器状态由get_sensor_status分别报告；未装配保持NULL，不以0代替未接入。"
+    },
+    {
+      "key": "get_hcho",
+      "name": "甲醛输入",
+      "requires": [
+        "sensor_hcho"
+      ],
+      "signature": "uint16_t get_hcho(void *ctx)",
+      "required": true,
+      "description": "整数μg/m³，传感器状态由get_sensor_status分别报告；未装配保持NULL，不以0代替未接入。"
+    },
+    {
+      "key": "get_tvoc",
+      "name": "TVOC输入",
+      "requires": [
+        "sensor_tvoc"
+      ],
+      "signature": "uint16_t get_tvoc(void *ctx)",
+      "required": true,
+      "description": "整数μg/m³，传感器状态由get_sensor_status分别报告；未装配保持NULL，不以0代替未接入。"
+    }
+  ],
+  "constraints": [
+    {
+      "kind": "atLeastOne",
+      "features": [
+        "purify",
+        "humidify"
+      ],
+      "message": "净化与加湿至少启用一项。"
+    }
+  ],
+  "directories": [
+    "src",
+    "include",
+    "config",
+    "port",
+    "examples",
+    "verification"
+  ],
+  "staticFiles": [
+    "CMakeLists.txt",
+    "source-snapshot.json"
+  ],
+  "adapter": "adapter.json",
+  "verification": {
+    "sourceDirectories": [
+      "src",
+      "port",
+      "examples"
+    ],
+    "includeDirectories": [
+      "include",
+      "config",
+      "port"
+    ],
+    "consumer": "verification/consumer.c",
+    "scope": "源码0.2.2的配置与基础SDK消费；真实C场景另验证定时/睡眠、面板、选配和输入状态。不包含实机或全部Excel。"
+  },
+  "workflow": "air-care-standard-v2"
+}

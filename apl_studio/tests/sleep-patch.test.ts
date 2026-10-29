@@ -14,16 +14,16 @@ import { ProductStore } from '@apl-studio/product'
 import { AcceptanceService, SimulationService, SdkBuildService } from '@apl-studio/build'
 import { StandardOptions } from '../apps/web/src/StandardOptions'
 
-test('睡眠补丁0.4.1：配置→真实C输入契约验收→直接源码生成→GCC消费（不执行浏览器或HTTP下载）', async () => {
+for (const [version, sourceVersion] of [['0.4.1','0.2.1'],['0.4.2','0.2.2']]) test('审计补丁'+version+'：配置/真实C/源码/消费与内部归档（无下载端点）', async () => {
   const directory = mkdtempSync(join(tmpdir(),'apl-advanced-')), registry = new TemplateRegistry()
   registry.loadDirectory(resolve(import.meta.dirname,'../../apl_sdk_template'))
-  const provider = registry.get('apl.air-care','0.4.1')!, template = provider.descriptor
+  const provider = registry.get('apl.air-care',version)!, template = provider.descriptor
   const store = new ProductStore(join(directory,'studio.db')), simulations = new SimulationService(join(directory,'simulation'),registry)
   const acceptances = new AcceptanceService(join(directory,'acceptance'),registry,simulations)
   const builds = new SdkBuildService(join(directory,'archives'),registry,undefined,undefined,acceptances)
   const results: unknown[] = []
   try {
-    assert.equal(template.sourceVersion,'0.2.1')
+    assert.equal(template.sourceVersion,sourceVersion)
     for (const profile of ['purify','humidify','combined','all_optional','no_optional']) {
       const keys = new Set(['power','fan_speed',...(profile!=='humidify'?['purify','pm25']:[]),...(profile!=='purify'?['humidify','humidity','drying']:[])])
       if(profile!=='no_optional') for(const key of ['uv','anion','wifi']) keys.add(key)
@@ -54,11 +54,11 @@ test('睡眠补丁0.4.1：配置→真实C输入契约验收→直接源码生�
       // In-process artifact validation only: no HTTP endpoint or browser download.
       const archive = unzipSync(builds.artifact(job.id).bytes)
       const packaged = JSON.parse(strFromU8(archive['apl-sdk/manifest.json']))
-      assert.equal(packaged.sdkReady,true); assert.equal(packaged.sourceVersion,'0.2.1')
+      assert.equal(packaged.sdkReady,true); assert.equal(packaged.sourceVersion,sourceVersion)
       assert.equal(packaged.verification.acceptance.fingerprint,report!.fingerprint)
       for(const [path,hash] of Object.entries(packaged.files)) assert.equal(createHash('sha256').update(archive['apl-sdk/'+path]).digest('hex'),hash)
 
-      const output=resolve(process.env.APL_ADVANCED_OUTPUT ?? join(directory,'generated'),profile)
+      const output=resolve(process.env.APL_ADVANCED_OUTPUT ? join(process.env.APL_ADVANCED_OUTPUT,version) : join(directory,'generated'),profile)
       const delivery = new Map([...files,...acceptances.deliverables(product,provider,report!)])
       for(const [path,data] of delivery) {
         const target=join(output,path); mkdirSync(dirname(target),{recursive:true}); writeFileSync(target,data)
@@ -68,14 +68,21 @@ test('睡眠补丁0.4.1：配置→真实C输入契约验收→直接源码生�
       const args=['-std=c11','-Wall','-Wextra','-Werror',...['include','config','port'].map(f=>'-I'+join(output,f)),...['apl.c','apl_core.c','apl_hmi.c','apl_product.c'].map(f=>join(output,'src',f)),join(output,'port/apl_port.c'),join(output,'verification/consumer.c'),'-o',join(output,'consumer.exe')]
       execFileSync(process.env.CC!,args,{encoding:'utf8'})
       const consumer=execFileSync(join(output,'consumer.exe'),[],{encoding:'utf8'})
+      let memoryConsumer: string | null = null
+      if (version==='0.4.2') {
+        const memoryArgs=args.map(value=>value===join(output,'verification/consumer.c')?join(output,'verification/memory_cadence.c'):value===join(output,'consumer.exe')?join(output,'memory.exe'):value)
+        execFileSync(process.env.CC!,memoryArgs,{encoding:'utf8'})
+        memoryConsumer=execFileSync(join(output,'memory.exe'),[],{encoding:'utf8'}).trim()
+      }
+
       const doc=readFileSync(join(output,'docs/product-spec.md'),'utf8');assert.match(doc,/选配能力/);assert.match(doc,/1.5秒/)
-      results.push({profile,checks:report!.checks.length,acceptance:report!.fingerprint,source:report!.sourceFingerprint,consumer:consumer.trim(),archiveVerification:{id:job.id,checks:job.checks,fingerprint:job.fingerprint,fileCount:Object.keys(packaged.files).length},output})
+      results.push({profile,checks:report!.checks.length,acceptance:report!.fingerprint,source:report!.sourceFingerprint,consumer:consumer.trim(),memoryConsumer,archiveVerification:{id:job.id,checks:job.checks,fingerprint:job.fingerprint,fileCount:Object.keys(packaged.files).length},output})
     }
     // Every source byte in the new frozen candidate matches the committed root snapshot.
-    const root=resolve(import.meta.dirname,'../../apl_sdk_template/air-care/0.4.1')
+    const root=resolve(import.meta.dirname,'../../apl_sdk_template/air-care/'+version)
     const snapshot=JSON.parse(readFileSync(join(root,'source-snapshot.json'),'utf8'))
     for(const [path,hash] of Object.entries(snapshot.rootFiles)) assert.equal(createHash('sha256').update(readFileSync(join(root,path))).digest('hex'),hash)
-    if(process.env.APL_ADVANCED_OUTPUT) writeFileSync(join(process.env.APL_ADVANCED_OUTPUT,'results.json'),JSON.stringify({scope:'no browser/HTTP download; direct generation and native C validation',results},null,2))
+    if(process.env.APL_ADVANCED_OUTPUT) writeFileSync(join(process.env.APL_ADVANCED_OUTPUT,version,'results.json'),JSON.stringify({scope:'no browser/HTTP download; direct generation and native C validation',results},null,2))
     console.log(JSON.stringify(results))
   } finally {
     await simulations.close(); await acceptances.close(); await builds.close(); store.close()

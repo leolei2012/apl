@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.16)
+project(apl_sdk LANGUAGES C)
+file(GLOB_RECURSE APL_SOURCES CONFIGURE_DEPENDS src/*.c)
+add_library(apl STATIC ${APL_SOURCES})
+target_include_directories(apl PUBLIC include config)
+target_compile_features(apl PUBLIC c_std_11)
+# 可选移植模板，不自动链接进实际应用。
+add_library(apl_port_example OBJECT port/apl_port.c examples/app.c)
+target_include_directories(apl_port_example PRIVATE port)
+target_link_libraries(apl_port_example PRIVATE apl)

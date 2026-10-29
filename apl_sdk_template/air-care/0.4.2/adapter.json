@@ -1,0 +1,61 @@
+{
+  "power": {
+    "get": "return APL_RUN_ON == apl_core_get_run_state(&self->core);",
+    "set": "enum apl_run_state state = apl_core_get_run_state(&self->core);\n    if (value) return state == APL_RUN_ON || send_command(self, APL_LINK_CMD_POWER, 0u);\n    if (state == APL_RUN_ON) return send_command(self, APL_LINK_CMD_POWER, 0u);\n    return state == APL_RUN_STANDBY || state == APL_RUN_DRY;",
+    "initialise": "(void){{PREFIX}}_set_power(self, {{DEFAULT}});"
+  },
+  "fan_speed": {
+    "get": "return ({{TYPE}})apl_core_get_fan_gear(&self->core);",
+    "set": "return send_command(self, APL_LINK_CMD_FAN_SET, (uint8_t)value);"
+  },
+  "purify": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.purify_on != 0u;",
+    "set": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return (s.purify_on != 0u) == value || send_command(self, APL_LINK_CMD_PURIFY_TOGGLE, 0u);",
+    "initialise": "(void){{PREFIX}}_set_purify(self, {{DEFAULT}});"
+  },
+  "humidify": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.humidify_on != 0u;",
+    "set": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return (s.humidify_on != 0u) == value || send_command(self, APL_LINK_CMD_HUMIDIFY_TOGGLE, 0u);",
+    "initialise": "(void){{PREFIX}}_set_humidify(self, {{DEFAULT}});"
+  },
+  "humidity": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.humidity;"
+  },
+  "pm25": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.pm25;"
+  },
+  "drying": {
+    "get": "return APL_RUN_DRY == apl_core_get_run_state(&self->core);"
+  },
+  "uv": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.uv_requested != 0u;",
+    "set": "return send_command(self, APL_LINK_CMD_UV_SET, value ? 1u : 0u);",
+    "initialise": "(void){{PREFIX}}_set_uv(self, {{DEFAULT}});"
+  },
+  "anion": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.anion_requested != 0u;",
+    "set": "return send_command(self, APL_LINK_CMD_ANION_SET, value ? 1u : 0u);",
+    "initialise": "(void){{PREFIX}}_set_anion(self, {{DEFAULT}});"
+  },
+  "wifi": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return ({{TYPE}})s.wifi;"
+  },
+  "sensor_pm10": {
+    "get": "return APL_COMPILE_SENSOR_PM10 != 0u;"
+  },
+  "sensor_hcho": {
+    "get": "return APL_COMPILE_SENSOR_HCHO != 0u;"
+  },
+  "sensor_tvoc": {
+    "get": "return APL_COMPILE_SENSOR_TVOC != 0u;"
+  },
+  "sensor_ready": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.sensors_ready;"
+  },
+  "sensor_faults": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.sensor_faults;"
+  },
+  "module_faults": {
+    "get": "struct apl_link_snapshot s;\n    apl_core_get_snapshot(&self->core, &s);\n    return s.module_faults;"
+  }
+}
