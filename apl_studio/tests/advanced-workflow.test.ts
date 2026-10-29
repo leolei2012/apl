@@ -43,10 +43,11 @@ test('v2配置→真实C输入契约验收→直接源码生成→GCC消费（�
       const files=await provider.generate(definition)
       acceptances.requireSource(acceptances.require(product),files)
       const output=resolve(process.env.APL_ADVANCED_OUTPUT ?? join(directory,'generated'),profile)
-      for(const [path,data] of [...files,...acceptances.deliverables(product,provider,report!)]) {
+      const delivery = new Map([...files,...acceptances.deliverables(product,provider,report!)])
+      for(const [path,data] of delivery) {
         const target=join(output,path); mkdirSync(dirname(target),{recursive:true}); writeFileSync(target,data)
       }
-      const hashes=Object.fromEntries([...files].map(([path,data])=>[path,createHash('sha256').update(data).digest('hex')]))
+      const hashes=Object.fromEntries([...delivery].map(([path,data])=>[path,createHash('sha256').update(data).digest('hex')]))
       writeFileSync(join(output,'manifest.json'),JSON.stringify({format:'apl-source-validation-v1',scope:'直接源码生成与本机验收；未执行归档下载，不替代已取消浏览器操作',template:report!.template,acceptance:report!.fingerprint,files:hashes},null,2))
       const args=['-std=c11','-Wall','-Wextra','-Werror',...['include','config','port'].map(f=>'-I'+join(output,f)),...['apl.c','apl_core.c','apl_hmi.c','apl_product.c'].map(f=>join(output,'src',f)),join(output,'port/apl_port.c'),join(output,'verification/consumer.c'),'-o',join(output,'consumer.exe')]
       execFileSync(process.env.CC!,args,{encoding:'utf8'})
