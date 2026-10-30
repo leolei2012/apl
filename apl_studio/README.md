@@ -11,11 +11,15 @@ AP 空气治理是第一个模板，另有独立 C11 灯控示例验证多品类
 需要 Node.js ≥22.19.0、npm 和能够生成本机可执行程序的 GCC 兼容 C11 编译器。
 
 ```powershell
-npm ci
+cd apl_studio
 npm start
 ```
 
-访问 http://127.0.0.1:9190；Windows 也可双击 [start.cmd](start.cmd)。服务只监听本机。
+从APL仓库根目录先进入 `apl_studio`，再执行 `npm start`；与ProbeStation一样，先构建网页再启动服务。当前本机依赖已齐全，不需要重新安装；缺依赖时start.cmd只提示并退出，不自动安装。
+
+访问 http://127.0.0.1:9190；Windows 也可双击 [start.cmd](start.cmd)。服务固定监听本机9190，不读取APL_STUDIO_PORT、不自动换端口。启动前先检查端口，占用时显示中文提示并退出，数据库尚未打开；不停止其他进程。预检后若发生端口抢占，实际监听失败也会清理资源退出。
+
+产品和修订持续保存在 `apl_studio/.data/studio.db`，SDK/验收资料在同一`.data`下；重启复用原数据，不每次生成空目录，也不自动迁移或导入19191/19194/19195的隔离数据。已有APL_STUDIO_DATA覆盖仍保留供隔离测试，普通启动无需设置；若终端之前设过该变量，确认终端打印的数据路径，想使用工程默认库可新开干净终端。
 
 开发时分别运行 `npm run dev`、`npm run dev:web`；Vite 页面 http://127.0.0.1:5174 代理 API / WebSocket。服务托管已构建页面，用 `npm run build:web` 更新。
 
@@ -62,7 +66,7 @@ npm start
 ## 设置与数据
 
 - `APL_STUDIO_DATA`：默认 .data，包含 studio.db 和 sdk/<任务 UUID>/，停服后备份整个目录。
-- `APL_STUDIO_PORT`：默认9190，Vite 代理使用默认端口。
+- 端口固定9190（apps/server/src/startup.ts），Vite代理也使用9190。旧`APL_STUDIO_PORT`不再影响新工程服务，已运行旧快照不变。
 - `APL_STUDIO_TEMPLATES`：默认相邻的 apl_sdk_template，启动时加载；发布新版本后重启。
 - `APL_STUDIO_CC`：本机编译器路径，其次读取 CC。Windows 检测已有 C:/Qt/Tools/mingw1310_64/bin/gcc.exe，否则使用 PATH 中的 gcc；不依赖 Qt 界面或 Qt 库。
 
