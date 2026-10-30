@@ -1,6 +1,7 @@
 import { StandardOptions } from './StandardOptions'
+import { AirCarePanel } from './AirCarePanel'
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Play, Download, Info, Loader2, ArrowRight, Power } from 'lucide-react'
+import { CheckCircle2, Play, Download, Info, Loader2, ArrowRight } from 'lucide-react'
 import type { Definition, Product, Value } from '@apl-studio/model'
 import type { AcceptanceReport, BuildJob, TemplateDescriptor } from '@apl-studio/model/template'
 import type { SimulationSession } from '@apl-studio/model/simulation'
@@ -96,6 +97,7 @@ function PmSimulator({ product, dirty }: { product: Product; dirty: boolean }) {
   const [session, setSession] = useState<SimulationSession | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const id = useRef('')
   const alive = useRef(true)
+  const operating = useRef(false), requestVersion = useRef(0)
   useEffect(() => {
     alive.current = true
     const stop = () => { if (id.current) { void fetch('/api/simulation/sessions/' + id.current, { method: 'DELETE', keepalive: true }).catch(() => {}); id.current = '' } }
@@ -103,15 +105,16 @@ function PmSimulator({ product, dirty }: { product: Product; dirty: boolean }) {
     return () => { alive.current = false; window.removeEventListener('pagehide', stop); stop() }
   }, [])
   useEffect(() => {
-    if (session?.status !== 'building') return
+    if (!session || !['building', 'ready'].includes(session.status)) return
     let stopped = false, checking = false
     const timer = setInterval(() => {
-      if (checking) return
+      if (checking || operating.current) return
       checking = true
+      const version = requestVersion.current
       void (async () => {
         let next = await api.simulation(session.id)
         if (next.status === 'ready' && next.snapshot?.ms === 0) next = await api.simulate(session.id, { type: 'advance', ms: 2100 })
-        if (!stopped) setSession(next)
+        if (!stopped && version === requestVersion.current) setSession(next)
       })().catch(e => { if (!stopped) setError(e.message) }).finally(() => { checking = false })
     }, 500)
     return () => { stopped = true; clearInterval(timer) }
@@ -119,17 +122,28 @@ function PmSimulator({ product, dirty }: { product: Product; dirty: boolean }) {
   const ready = session?.status === 'ready', snapshot = session?.snapshot
   const disabled = busy || !ready
   async function start() {
+    if (operating.current) return
+    operating.current = true; ++requestVersion.current
     setBusy(true); setError('')
     try { if (id.current) await api.stopSimulation(id.current); const next = await api.startSimulation(product, false); if (!alive.current) { await api.stopSimulation(next.id); return }; id.current = next.id; setSession(next) }
     catch (e) { setError((e as Error).message) }
-    finally { setBusy(false) }
+    finally { operating.current = false; setBusy(false) }
   }
   async function input(key: string, value: Value) {
-    if (!session) return
+    if (!session || operating.current) return
+    operating.current = true; ++requestVersion.current
     setBusy(true); setError('')
     try { await api.simulate(session.id, { type: 'input', key, value }); setSession(await api.simulate(session.id, { type: 'advance', ms: key === 'pm25' ? 1000 : 10 })) }
     catch (e) { setError((e as Error).message) }
-    finally { setBusy(false) }
+    finally { operating.current = false; setBusy(false) }
   }
-  return <section className="card"><div className="section-heading"><div><h2>体验我的产品</h2><p>按键和环境输入驱动实际C程序，下面显示真实输出。</p></div><button className="button" disabled={busy || dirty || session?.status === 'building'} onClick={() => void start()}>{session?.status === 'building' ? '正在准备…' : session ? '重新开始体验' : '开始体验'}</button></div>{(dirty || session && session.revision !== product.revision) && <p className="inline-alert warning">当前体验仍使用旧方案；保存后重新开始体验，才会应用新配置。</p>}{error && <p role="alert">{error}</p>}{session?.status === 'failed' && <p role="alert">{session.diagnostics}</p>}{session && <><div className="pm-preview"><div className="pm-device-display"><strong>{['待机', '运行中', '关机风干', '产测'][Number(snapshot?.internal.run_state)] ?? '等待输入'}</strong><span>实际风速：{snapshot && !snapshot.outputs.fan ? '风机已停止' : gears[Number(snapshot?.outputs.fan_gear)] ?? '等待输入'}</span><span>所选模式：{gears[Number(snapshot?.internal.fan_speed)] ?? '等待输入'}</span></div><div className="pm-device-buttons"><button className="button" disabled={disabled} onClick={() => void input('Power', 'short')}><Power size={15}/>电源</button><button className="button" disabled={disabled || snapshot?.internal.run_state !== 1} onClick={() => void input('Speed', 'short')}>风速短按</button><button className="button" disabled={disabled || snapshot?.internal.run_state !== 1} onClick={() => void input('Speed', 'long')}>风速长按3秒</button></div></div>{product.definition.functions.some(f => f.key === "pm25") && <div className="pm-environment"><strong>改变空气质量</strong>{[35, 36, 75, 76, 150, 151].map(pm => <button className="button small" key={pm} disabled={disabled} onClick={() => void input('pm25', pm)}>PM2.5 {pm}</button>)}</div>}{["0.3.0", "0.4.0", "0.4.1", "0.4.2"].includes(product.definition.template?.version ?? "") && <div className="form-grid">{session.descriptor.controls.filter(c => !["Power", "Speed", "pm25"].includes(c.key)).map(c => <Field key={c.key} label={panelNames[c.key] ?? c.name}>{c.kind === "gesture" ? <><button className="button small" disabled={disabled} aria-label={(panelNames[c.key] ?? c.name) + "短按"} onClick={() => void input(c.key, "short")}>短按</button><button className="button small" disabled={disabled} aria-label={(panelNames[c.key] ?? c.name) + "长按"} onClick={() => void input(c.key, "long")}>长按3秒</button></> : c.kind === "enum" ? <select disabled={disabled} value={String(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, Number(e.target.value))}>{c.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> : c.kind === "bool" ? <input type="checkbox" disabled={disabled} checked={!!(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, e.target.checked)}/> : <input type="number" disabled={disabled} min={c.min} max={c.max} step={c.step} value={Number(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, Number(e.target.value))}/>}</Field>)}</div>}{["0.3.0", "0.4.0", "0.4.1", "0.4.2"].includes(product.definition.template?.version ?? "") && snapshot && <div className="table-scroll"><table className="pm-rule-table"><caption>实际C输出与状态</caption><tbody>{session.descriptor.outputs.map(o => <tr key={o.key}><th>{o.name}</th><td>{o.boolean ? snapshot.outputs[o.key] ? "开启" : "关闭" : o.options?.find(v => v.value === snapshot.outputs[o.key])?.label ?? String(snapshot.outputs[o.key])}</td></tr>)}<tr><th>目标湿度</th><td>{snapshot.internal.humidity_target || "OF"}</td></tr><tr><th>风干剩余秒数</th><td>{snapshot.internal.dry_left_s}</td></tr></tbody></table></div>}<p className="pm-scope">体验使用已保存的方案。若配置已保存更新，需要重新开始体验；未选择自动档时，改变空气质量不会改变手动风速。</p></>}</section>
+  async function advance(ms: number) {
+    if (!session || operating.current) return
+    operating.current = true; ++requestVersion.current
+    setBusy(true); setError('')
+    try { setSession(await api.simulate(session.id, { type: 'advance', ms })) }
+    catch (e) { setError((e as Error).message) }
+    finally { operating.current = false; setBusy(false) }
+  }
+  return <section className="card"><div className="section-heading"><div><h2>体验我的产品</h2><p>按键和环境输入驱动实际C程序，下面显示真实输出。</p></div><button className="button" disabled={busy || dirty || session?.status === 'building'} onClick={() => void start()}>{session?.status === 'building' ? '正在准备…' : session ? '重新开始体验' : '开始体验'}</button></div>{(dirty || session && session.revision !== product.revision) && <p className="inline-alert warning">当前体验仍使用旧方案；保存后重新开始体验，才会应用新配置。</p>}{error && <p role="alert">{error}</p>}{session?.status === 'failed' && <p role="alert">{session.diagnostics}</p>}{!session && <AirCarePanel snapshot={null} controls={[]} disabled onGesture={input}/>}{session && <><AirCarePanel snapshot={snapshot} controls={session.descriptor.controls} disabled={disabled} onGesture={input}/><div className="pm-device-display ac-live-summary"><strong>{["待机", "运行中", "关机风干", "产测"][Number(snapshot?.internal.run_state)] ?? "等待输入"}</strong><span>实际风速：{snapshot && !snapshot.outputs.fan ? "风机已停止" : gears[Number(snapshot?.outputs.fan_gear)] ?? "等待输入"}</span><span>所选模式：{gears[Number(snapshot?.internal.fan_speed)] ?? "等待输入"}</span></div><div className="pm-environment"><strong>观察时间变化</strong>{[1, 5, 20].map(seconds => <button className="button small" key={seconds} disabled={disabled} onClick={() => void advance(seconds * 1000)}>等待{seconds}秒</button>)}<span className="pm-scope">快速推进设备时间，观察睡眠熄屏、定时及显示切换</span></div>{product.definition.functions.some(f => f.key === "pm25") && <div className="pm-environment"><strong>改变空气质量</strong>{[35, 36, 75, 76, 150, 151].map(pm => <button className="button small" key={pm} disabled={disabled} onClick={() => void input('pm25', pm)}>PM2.5 {pm}</button>)}</div>}{["0.3.0", "0.4.0", "0.4.1", "0.4.2"].includes(product.definition.template?.version ?? "") && <div className="form-grid">{session.descriptor.controls.filter(c => c.kind !== "gesture" && c.key !== "pm25").map(c => <Field key={c.key} label={panelNames[c.key] ?? c.name}>{c.kind === "enum" ? <select disabled={disabled} value={String(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, Number(e.target.value))}>{c.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> : c.kind === "bool" ? <input type="checkbox" disabled={disabled} checked={!!(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, e.target.checked)}/> : <input type="number" disabled={disabled} min={c.min} max={c.max} step={c.step} value={Number(snapshot?.values[c.key] ?? c.default)} onChange={e => void input(c.key, Number(e.target.value))}/>}</Field>)}</div>}{["0.3.0", "0.4.0", "0.4.1", "0.4.2"].includes(product.definition.template?.version ?? "") && snapshot && <details><summary>查看实际输出与状态</summary><div className="table-scroll"><table className="pm-rule-table"><caption>实际C输出与状态</caption><tbody>{session.descriptor.outputs.map(o => <tr key={o.key}><th>{o.name}</th><td>{o.boolean ? snapshot.outputs[o.key] ? "开启" : "关闭" : o.options?.find(v => v.value === snapshot.outputs[o.key])?.label ?? String(snapshot.outputs[o.key])}</td></tr>)}<tr><th>目标湿度</th><td>{snapshot.internal.humidity_target || "OF"}</td></tr><tr><th>风干剩余秒数</th><td>{snapshot.internal.dry_left_s}</td></tr></tbody></table></div></details>}<p className="pm-scope">体验使用已保存的方案。若配置已保存更新，需要重新开始体验；未选择自动档时，改变空气质量不会改变手动风速。</p></>}</section>
 }
