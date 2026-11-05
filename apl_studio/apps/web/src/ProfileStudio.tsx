@@ -12,7 +12,6 @@ import { AirCarePanel } from './AirCarePanel'
 import { ProfileRuntimeParameters } from './ProfileRuntimeParameters'
 import './ProfileStudio.css'
 import './ParameterGuide.css'
-import './KeyGestureGuide.css'
 
 const initialFeatures: ProductFeatures = { purify: true, humidify: false }
 const gears = ['睡眠', '一档', '二档', '三档', '自动', '极速']

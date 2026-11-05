@@ -16,6 +16,7 @@
 
 .profile-studio fieldset.ps-form-stack{margin:0;padding:0;border:0;min-width:0}
 .ps-parameter-groups{display:grid;gap:12px}
+.ps-key-reference{font-size:12px;line-height:1.8;color:var(--ps-muted);margin:15px 0}
 .ps-parameter-group{min-width:0;border:1px solid var(--ps-line);border-radius:10px;background:#fff}
 .ps-parameter-group>summary{display:flex;align-items:center;gap:16px;padding:17px 19px;list-style:none;cursor:pointer;border-radius:10px;background:#f8faf7}
 .ps-parameter-group>summary::-webkit-details-marker{display:none}

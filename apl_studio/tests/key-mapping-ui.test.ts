@@ -28,17 +28,21 @@ test('按键映射编辑器保留七个宿主输入槽位，旧配置默认使�
     assert.match(select(markup, 'short', key).tag, /disabled=""/)
     assert.match(select(markup, 'long', key).tag, /disabled=""/)
   }
-  assert.match(markup, /不会改变 GPIO、触摸通道或宿主与 APL 的按键绑定/)
+  assert.match(markup, /修改动作不会改变按键编号/)
   assert.match(markup, /组合键仍按原始输入组合识别/)
 })
 
-test('交换动作只改变选择值，编辑器保留原始输入的名称和编号', () => {
+test('改配动作后只展示KEY编号与实际动作，仍保留原始输入绑定', () => {
   const mapping = defaultKeyMapping()
   mapping.enabled = true; mapping.short[3] = 1; mapping.short[5] = 3; mapping.long[4] = 9
   const markup = html(setKeyMapping(product(), mapping))
   assert.match(markup, /name="key_mapping.enabled"[^>]*checked=""/)
   assert.match(markup, /data-key-slot="Light"/)
-  assert.match(markup, /Light · 3/)
+  const summaries = [...markup.matchAll(/<summary>([\s\S]*?)<\/summary>/g)].map(match => match[1])
+  assert.deepEqual(summaries.map(summary => summary.match(/<strong>(.*?)<\/strong>/)?.[1]), ['KEY1', 'KEY2', 'KEY3', 'KEY4', 'KEY5', 'KEY6', 'KEY7'])
+  assert.doesNotMatch(summaries.join(''), /(?:Power|Speed|Timer|Purify|Humidity|Light|Filter) · \d/)
+  assert.match(summaries[5], /短按：电源开关/)
+  assert.match(select(markup, 'short', 'Light').tag, /aria-label="KEY6 短按动作"/)
   assert.match(select(markup, 'short', 'Light').options, /<option value="1"[^>]*selected=""/)
   assert.match(select(markup, 'short', 'Power').options, /<option value="3"[^>]*selected=""/)
   assert.match(select(markup, 'long', 'Speed').options, /<option value="9"[^>]*selected=""/)
