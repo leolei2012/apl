@@ -6,9 +6,11 @@ export interface SimulationControl {
   options?: { value: number; label: string }[]; position?: string
 }
 export interface SimulationSlot { key: string; name: string; unit?: string; options?: { value: number; label: string }[]; boolean?: boolean }
+export interface SimulationCombination { key: string; name: string; keys: string[]; holdMs: number }
 export interface SimulationDescriptor {
   id: string; name: string; tickMs: number; panel: 'round' | 'controls'; memory: boolean
   controls: SimulationControl[]; outputs: SimulationSlot[]; internal: SimulationSlot[]; display: SimulationSlot[]
+  combinations?: SimulationCombination[]
 }
 export interface SimulationSnapshot {
   powered: boolean; ms: number
@@ -22,3 +24,4 @@ export interface SimulationSession {
 }
 export type SimulationAction = { type: 'running'; value: boolean } | { type: 'supply'; on: boolean } | { type: 'reset' }
   | { type: 'advance'; ms: number } | { type: 'input'; key: string; value: Value }
+  | { type: 'combo'; keys: string[]; holdMs: number }

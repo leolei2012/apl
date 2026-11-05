@@ -4,6 +4,7 @@ import type { Product, Value } from '@apl-studio/model'
 import type { SimulationAction, SimulationControl, SimulationDescriptor, SimulationSession, SimulationSlot } from '@apl-studio/model/simulation'
 import { api, downloadBlob } from './api'
 import { Field, Switch } from './components'
+import { SimulationCombinations } from './SimulationCombinations'
 
 const time = (ms: number) => `${(ms / 1000).toFixed(2)} s`
 function valueText(slot: SimulationSlot | undefined, value: Value | undefined) {
@@ -85,7 +86,7 @@ export function SimulationWorkbench({ product, dirty, valid, onSave, onOverview 
       <div className="simulation-style-picker"><div><strong>面板样式</strong><span>切换样式保留运行状态与事件</span></div><label><span className="sr-only">选择仿真面板样式</span><select aria-label="选择仿真面板样式" value={panelStyle} onChange={e => changePanelStyle(e.target.value as PanelStyle)}><option value="device">{descriptor.panel === 'round' ? '圆形面板' : '卡片面板'}</option><option value="bench">{keys.length ? '按键台' : '紧凑控制台'}</option></select></label></div>
       <div className="simulation-clock"><div><Activity size={15}/><strong>虚拟时间 <output>{time(snapshot?.ms ?? 0)}</output></strong><span>{snapshot ? snapshot.powered ? '设备已上电' : '设备已掉电' : '等待启动'} · {descriptor.tickMs} ms / 拍</span></div><div>
         <button className="button small" disabled={disabled} onClick={() => act({ type: 'running', value: !session?.running })}>{session?.running ? <Pause size={13}/> : <Play size={13}/>} {session?.running ? '暂停' : '继续'}</button>
-        <button className="button small" disabled={disabled} onClick={() => act({ type: 'advance', ms: 10 })}>单步 10 ms</button>
+        <button className="button small" disabled={disabled} onClick={() => act({ type: 'advance', ms: descriptor.tickMs })}>单步 {descriptor.tickMs} ms</button>
         <button className="button small" disabled={disabled} onClick={() => act({ type: 'advance', ms: 1000 })}>+1 秒</button>
         <button className="button small" disabled={disabled} onClick={() => act({ type: 'advance', ms: 60000 })}><FastForward size={13}/>+1 分钟</button>
       </div></div>
@@ -98,6 +99,7 @@ export function SimulationWorkbench({ product, dirty, valid, onSave, onOverview 
         </div>}
         <p className="simulation-hint">{descriptor.panel === 'round' ? (panelStyle === 'bench' ? '使用每个按键的短按 / 长按按钮；长按自动推进约 3 秒。Tab 聚焦后可用 Enter / 空格操作。' : '点击按键短按，点击下方文字长按；长按自动推进约 3 秒。Tab 聚焦后可用 Enter / 空格操作。上电全亮持续 2 秒。') : '请求状态与实际输出分别显示。暂停后单步推进，可检查开灯延迟。'}</p>
       </section>
+      <SimulationCombinations combinations={descriptor.combinations} disabled={disabled || !snapshot?.powered} onAction={act}/>
       {controls.some(c => c.target === 'sensor') && <section className="card"><div className="section-heading"><div><h2>环境输入</h2><p>注入硬件读数，业务代码按自己的采样周期读取。</p></div></div><div className="simulation-controls">{controls.filter(c => c.target === 'sensor').map(c => <SimulationInput key={c.key} control={c} value={snapshot?.values[c.key] ?? c.default} disabled={disabled} onChange={value => act({ type: 'input', key: c.key, value })}/>)}</div></section>}
       <section className="card"><div className="section-heading"><div><h2>实际负载</h2><p>来自 C 输出回调；掉电时切断模拟负载。</p></div></div><div className="simulation-loads">{descriptor.outputs.map(slot => <div key={slot.key} className={'simulation-load ' + (slot.boolean && snapshot?.outputs[slot.key] ? 'on' : '')}><span className="load-indicator"/><div><span>{slot.name}</span><strong>{valueText(slot, snapshot?.outputs[slot.key])}</strong></div></div>)}</div></section>
       </div><div className="stack"><section className="card simulation-events"><div className="section-heading"><div><h2>事件记录</h2><p>操作、负载和业务状态分别记录；保留最近 300 条。</p></div><button className="text-button" disabled={!session?.events.length} onClick={() => setClearedAt(session?.events.at(-1)?.seq ?? 0)}>清空</button></div><div className="simulation-event-tools"><select aria-label="筛选仿真事件" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">全部事件</option>{Object.entries(eventNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select><button className="icon-button" disabled={!events.length} aria-label="导出仿真事件" onClick={() => downloadBlob(new Blob([JSON.stringify({ productId: product.id, revision: session?.revision, template: session?.template, driverFingerprint: session?.driverFingerprint, events }, null, 2)], { type: 'application/json' }), product.definition.code + '-simulation.json')}><Download size={16}/></button></div>

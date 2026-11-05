@@ -1,1 +1,16 @@
-{"name":"@apl-studio/model","version":"0.1.0","private":true,"type":"module","main":"src/index.ts","exports":{".":"./src/index.ts","./template":"./src/template.ts","./simulation":"./src/simulation.ts"}}
+{
+  "name": "@apl-studio/model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./template": "./src/template.ts",
+    "./simulation": "./src/simulation.ts",
+    "./profile": "./src/profile.ts",
+    "./firmware": "./src/firmware.ts",
+    "./key-mapping": "./src/key-mapping.ts",
+    "./memory": "./src/memory.ts"
+  }
+}

@@ -4,6 +4,7 @@
  */
 
 #include "apl_hmi.h"
+#include "apl_internal.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -13,6 +14,10 @@
 #else
 #define APL_HMI_MAY_ALIAS
 #endif
+
+#define APL_HMI_HAS_WARMUP (APL_COMPILE_SENSOR_PM25 || APL_COMPILE_SENSOR_PM10 || APL_COMPILE_SENSOR_HCHO || APL_COMPILE_SENSOR_TVOC || APL_COMPILE_SENSOR_HUMIDITY)
+#define APL_HMI_HAS_ROTATE (APL_COMPILE_SENSOR_PM25 && APL_COMPILE_SENSOR_HUMIDITY)
+#define APL_HMI_HAS_CLOCK (APL_COMPILE_TIMER || APL_COMPILE_HUMIDIFY || APL_COMPILE_WIFI)
 
 #define APL_HMI_GESTURE_OPEN        0u
 #define APL_HMI_GESTURE_LONG_DONE   1u
@@ -36,6 +41,7 @@
 #define APL_HMI_HUMIDITY_STEP       5u
 #define APL_HMI_SECONDS_PER_HOUR    3600u
 #define APL_HMI_DIGIT_MAX           999u
+#define APL_HMI_WARMUP_FRAME_TICKS  30u /* 300ms: top -> middle -> bottom */
 
 APL_STATIC_ASSERT(APL_HMI_KEY_COUNT <= 8, "键掩码放在 uint8_t 里");
 APL_STATIC_ASSERT(APL_HMI_LONG_PRESS_TICKS == 300u, "3 秒在 10 ms 拍上是 300 拍");
@@ -43,15 +49,20 @@ APL_STATIC_ASSERT(APL_HMI_POWERUP_LAMP_TICKS == (APL_HMI_POWERUP_LAMP_MS / APL_H
                "上电全灯 2 秒");
 APL_STATIC_ASSERT(APL_HMI_LAMP_HALF == 128u, "半亮是 128");
 APL_STATIC_ASSERT(APL_HMI_LAMP_FULL == 255u, "全亮是 255");
-APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000202u, "版本号与分段宏不一致");
+APL_STATIC_ASSERT(APL_HMI_VERSION_NUM == 0x000300u, "版本号与分段宏不一致");
 APL_STATIC_ASSERT(APL_HMI_WATER_LAMP_COUNT == 4u, "水位灯是四段");
+#if APL_HMI_COMPILE_KEYMAP
+APL_STATIC_ASSERT(APL_HMI_KEY_COUNT == APL_KEYMAP_COUNT, "映射与输入槽位数量须一致");
+#endif
 
 struct apl_hmi_key
 {
     uint8_t brightness;
+#if APL_HMI_COMPILE_KEY_CALLBACKS
     void (*on_short)(struct apl_hmi *self, void *ctx) APL_CALL;
     void (*on_long)(struct apl_hmi *self, void *ctx) APL_CALL;
     void *ctx;
+#endif
 };
 
 struct apl_hmi_key_track
@@ -78,26 +89,49 @@ struct apl_hmi_panel
     enum apl_link_result (*send)(const struct apl_link_command *command, void *ctx) APL_CALL;
     void *send_ctx;
     struct apl_link_snapshot snap;
+#if APL_HMI_HAS_CLOCK
     uint32_t clock;
+#endif
     enum apl_run_state prev_run;
     uint16_t wake_ticks;
     uint16_t setting_ticks;
+#if APL_COMPILE_TIMER
     uint16_t timer_repeat_ticks;
     uint8_t timer_editing;
+#endif
+#if APL_COMPILE_FILTER
     uint16_t query_ticks;
-    uint16_t rotate_ticks;
+#endif
+#if APL_HMI_HAS_ROTATE
+    uint32_t rotate_ticks;
+#endif
+#if APL_HMI_HAS_WARMUP
+    uint16_t warmup_animation_ticks;
+#endif
+#if APL_COMPILE_FILTER
     uint16_t red_blink_ticks;
     uint16_t red_blink_period;
+#endif
+#if APL_COMPILE_HUMIDIFY
     uint16_t full_blink_ticks;
+#endif
     uint8_t snap_valid;
     uint8_t light_off;
+#if APL_COMPILE_SLEEP
     uint8_t prev_sleep;
+#endif
     uint8_t setting;          /**< APL_HMI_SETTING_* */
     uint8_t setting_value;
+#if (APL_HMI_COMPILE_BUZZER || APL_COMPILE_HUMIDIFY)
     uint8_t last_beep_seq;
+#endif
+#if APL_COMPILE_FILTER
     uint8_t last_reset_seq;
+#endif
+#if APL_COMPILE_HUMIDIFY
     uint32_t alert_clock;     /**< 缺水闪烁从提醒开始时计相位 */
     enum apl_water_alert prev_alert;
+#endif
     uint8_t keys_down;        /**< 本拍按住的键。按住期间唤醒窗口不倒计时 */
 };
 
@@ -105,10 +139,16 @@ struct apl_hmi_panel
 struct APL_HMI_MAY_ALIAS apl_hmi_state
 {
     struct apl_hmi_key key[APL_HMI_KEY_COUNT];
+#if APL_HMI_COMPILE_AMBIENT
     uint8_t ambient_brightness;
     uint8_t ambient_red;
     uint8_t ambient_green;
     uint8_t ambient_blue;
+    uint8_t ambient_out_red;
+    uint8_t ambient_out_green;
+    uint8_t ambient_out_blue;
+    uint8_t ambient_output_valid;
+#endif
     uint8_t water[APL_HMI_WATER_LAMP_COUNT];
     uint8_t digit_brightness;
     char digit_content[APL_HMI_DIGIT_COUNT];
@@ -119,18 +159,26 @@ struct APL_HMI_MAY_ALIAS apl_hmi_state
     uint16_t powerup_lamp_ticks;
     const struct apl_hmi_ops *ops;
     void *ctx;
+#if APL_HMI_COMPILE_KEYMAP
+    const struct apl_keymap *keymap;
+#endif
     struct apl_hmi_key_track track[APL_HMI_KEY_COUNT];
+#if APL_HMI_COMBO_MAX > 0
     struct apl_hmi_combo_slot combo[APL_HMI_COMBO_MAX];
+#endif
     uint8_t icon[APL_HMI_ICON_COUNT];
     enum apl_hmi_water_color water_color;
+#if APL_HMI_COMPILE_BUZZER
     uint8_t buzz_count;
     uint8_t buzz_on;
     uint16_t buzz_on_ticks;
     uint16_t buzz_off_ticks;
     uint16_t buzz_phase;
+#endif
     struct apl_hmi_panel panel;
 };
 
+#if APL_COMPILE_HMI
 APL_STATIC_ASSERT(sizeof(struct apl_hmi_state) <= sizeof(struct apl_hmi),
                "APL_HMI_OPAQUE_SIZE 小于对象状态");
 APL_STATIC_ASSERT(APL_ALIGNOF(struct apl_hmi_state) <= APL_ALIGNOF(struct apl_hmi),
@@ -145,6 +193,103 @@ static const struct apl_hmi_state *apl_hmi_state_of_const(const struct apl_hmi *
 {
     return (const struct apl_hmi_state *)(const void *)self->storage.bytes;
 }
+
+#if APL_HMI_COMPILE_KEYMAP
+static uint8_t apl_hmi_key_is_compiled(enum apl_hmi_key_id key) APL_CALL;
+
+static uint8_t apl_hmi_keymap_active(const struct apl_hmi_state *state) APL_CALL
+{
+    return ((NULL != state->panel.send) && (NULL != state->keymap)
+            && (0u != state->keymap->enabled)) ? 1u : 0u;
+}
+
+static uint8_t apl_hmi_mapped_action(const struct apl_hmi_state *state,
+                                    uint8_t index, uint8_t is_long) APL_CALL
+{
+    return (0u != is_long) ? state->keymap->long_action[index]
+                           : state->keymap->short_action[index];
+}
+
+/** 能力检查与输入槽位无关。运行状态限制仍由对应动作/主控处理。 */
+static uint8_t apl_hmi_action_available(const struct apl_hmi_state *state, uint8_t action) APL_CALL
+{
+    const struct apl_link_snapshot *snap;
+
+    snap = &state->panel.snap;
+    APL_UNUSED_PARAM(snap);
+    switch (action)
+    {
+    case APL_KEY_ACTION_POWER:
+    case APL_KEY_ACTION_FAN_CYCLE:
+    case APL_KEY_ACTION_CHILD_LOCK_TOGGLE:
+    case APL_KEY_ACTION_LIGHT_TOGGLE:
+        return 1u;
+#if APL_COMPILE_DRY
+    case APL_KEY_ACTION_DRY_STOP:
+        return (0u != snap->humidify_enabled) ? 1u : 0u;
+#endif
+#if APL_CORE_HAS_TURBO
+    case APL_KEY_ACTION_TURBO_TOGGLE:
+        return 1u;
+#endif
+#if (APL_COMPILE_UV || APL_COMPILE_ANION)
+    case APL_KEY_ACTION_PURIFY_TOGGLE:
+        return ((0u != snap->uv_enabled) || (0u != snap->anion_enabled)) ? 1u : 0u;
+#endif
+#if APL_COMPILE_WIFI
+    case APL_KEY_ACTION_WIFI_PAIR:
+        return (0u != snap->wifi_enabled) ? 1u : 0u;
+#endif
+#if APL_COMPILE_TIMER
+    case APL_KEY_ACTION_TIMER_EDIT:
+        return 1u;
+#endif
+#if APL_COMPILE_HUMIDIFY
+    case APL_KEY_ACTION_HUMIDITY_CYCLE:
+        return ((0u != snap->humidify_enabled)
+                && ((0u != snap->purify_enabled)
+                    || (0u != (snap->sensors_configured & APL_SENSOR_HUMIDITY_MASK)))) ? 1u : 0u;
+    case APL_KEY_ACTION_HUMIDITY_EDIT:
+        return ((0u != snap->purify_enabled) && (0u != snap->humidify_enabled)
+                && (0u != (snap->sensors_configured & APL_SENSOR_HUMIDITY_MASK))) ? 1u : 0u;
+    case APL_KEY_ACTION_HUMIDIFY_TOGGLE:
+        return (0u != snap->humidify_enabled) ? 1u : 0u;
+#endif
+#if APL_COMPILE_FILTER
+    case APL_KEY_ACTION_FILTER_QUERY:
+    case APL_KEY_ACTION_FILTER_RESET_QUERY:
+        return ((0u != snap->purify_enabled) && (0u == snap->humidify_enabled)) ? 1u : 0u;
+#endif
+#if APL_COMPILE_SLEEP
+    case APL_KEY_ACTION_SLEEP_TOGGLE:
+        return 1u;
+#endif
+    default:
+        return 0u;
+    }
+}
+
+static uint8_t apl_hmi_mapped_key_available(const struct apl_hmi_state *state, uint8_t index) APL_CALL
+{
+    return ((0u != apl_hmi_action_available(state, apl_hmi_mapped_action(state, index, 0u)))
+            || (0u != apl_hmi_action_available(state, apl_hmi_mapped_action(state, index, 1u)))) ? 1u : 0u;
+}
+
+static void apl_hmi_mapped_power_lamps(struct apl_hmi_state *state, uint8_t brightness) APL_CALL
+{
+    uint8_t index;
+
+    for (index = 0u; index < APL_HMI_KEY_COUNT; index++)
+    {
+        if ((0u != apl_hmi_key_is_compiled((enum apl_hmi_key_id)index))
+            && ((APL_KEY_ACTION_POWER == apl_hmi_mapped_action(state, index, 0u))
+                || (APL_KEY_ACTION_POWER == apl_hmi_mapped_action(state, index, 1u))))
+        {
+            state->key[index].brightness = brightness;
+        }
+    }
+}
+#endif
 
 static uint8_t apl_hmi_key_is_compiled(enum apl_hmi_key_id key) APL_CALL
 {
@@ -300,6 +445,12 @@ static enum apl_hmi_key_level apl_hmi_level_at(const struct apl_hmi_key_state *k
 /** 未启用的功能，键灯不许亮。短按也不发出。长按限制尚未规定。 */
 static uint8_t apl_hmi_lamp_forced_off(const struct apl_hmi_state *state, uint8_t index) APL_CALL
 {
+#if APL_HMI_COMPILE_KEYMAP
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        return (0u == apl_hmi_mapped_key_available(state, index)) ? 1u : 0u;
+    }
+#endif
     if ((APL_HMI_KEY_PURIFY == index) && (0u == state->purify_enabled))
     {
         return 1u;
@@ -333,6 +484,22 @@ static uint8_t apl_hmi_lamp_forced_off(const struct apl_hmi_state *state, uint8_
 
 static void apl_hmi_force_disabled_lamps(struct apl_hmi_state *state) APL_CALL
 {
+#if APL_HMI_COMPILE_KEYMAP
+    uint8_t index;
+
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        for (index = 0u; index < APL_HMI_KEY_COUNT; index++)
+        {
+            if ((0u == apl_hmi_key_is_compiled((enum apl_hmi_key_id)index))
+                || (0u == apl_hmi_mapped_key_available(state, index)))
+            {
+                state->key[index].brightness = 0u;
+            }
+        }
+        return;
+    }
+#endif
     if ((0u == apl_hmi_key_is_compiled(APL_HMI_KEY_FILTER))
         || (0u != apl_hmi_lamp_forced_off(state, APL_HMI_KEY_FILTER)))
     {
@@ -361,7 +528,14 @@ static void apl_hmi_lamps_fill(struct apl_hmi_state *state, uint8_t brightness) 
         }
     }
 
+#if APL_HMI_COMPILE_AMBIENT
     state->ambient_brightness = brightness;
+
+    /* 全灯自检/产测使用RGB三通道全亮；亮度由输出阶段统一合并。 */
+    state->ambient_red = APL_HMI_LAMP_FULL;
+    state->ambient_green = APL_HMI_LAMP_FULL;
+    state->ambient_blue = APL_HMI_LAMP_FULL;
+#endif
 
     for (index = 0u; index < APL_HMI_WATER_LAMP_COUNT; index++)
     {
@@ -396,6 +570,13 @@ static void apl_hmi_powerup_idle(struct apl_hmi_state *state) APL_CALL
 
     apl_hmi_lamps_fill(state, 0u);
 
+#if APL_HMI_COMPILE_KEYMAP
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        apl_hmi_mapped_power_lamps(state, APL_HMI_LAMP_HALF);
+    }
+    else
+#endif
     if (0u != apl_hmi_key_is_compiled(APL_HMI_KEY_POWER))
     {
         state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_HALF;
@@ -410,6 +591,8 @@ static void apl_hmi_powerup_idle(struct apl_hmi_state *state) APL_CALL
 }
 
 /** 全灯阶段每拍重画。未启用的净化、加湿键灯随后仍被强制熄灭。 */
+static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL;
+
 static void apl_hmi_powerup_tick(struct apl_hmi_state *state) APL_CALL
 {
     if (0u == state->powerup_lamp_ticks)
@@ -422,6 +605,10 @@ static void apl_hmi_powerup_tick(struct apl_hmi_state *state) APL_CALL
     if (0u == state->powerup_lamp_ticks)
     {
         apl_hmi_powerup_idle(state);
+        if ((NULL != state->panel.send) && (0u != state->panel.snap_valid))
+        {
+            apl_hmi_panel_tick(state);
+        }
     }
     else
     {
@@ -435,9 +622,13 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
                               uint8_t is_long) APL_CALL;
 static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL;
 static uint8_t apl_hmi_panel_dark(const struct apl_hmi_state *state) APL_CALL;
+#if APL_COMPILE_TIMER
 static void apl_hmi_panel_timer_key(struct apl_hmi_state *state) APL_CALL;
+#endif
 
+#if APL_HMI_COMPILE_BUZZER
 static void apl_hmi_buzzer_tick(struct apl_hmi_state *state) APL_CALL;
+#endif
 
 /**
  * locked 用本拍开始时的童锁。回调里改锁，要等下一拍才影响其他键，
@@ -449,13 +640,39 @@ static void apl_hmi_emit(struct apl_hmi *self,
                          uint8_t locked,
                          uint8_t is_long) APL_CALL
 {
+#if APL_HMI_COMPILE_KEY_CALLBACKS
     struct apl_hmi_key *key;
     void (*callback)(struct apl_hmi *emit_self, void *emit_ctx) APL_CALL;
+#endif
+#if APL_HMI_COMPILE_KEYMAP
+    uint8_t action;
+#endif
 
     if (index >= APL_HMI_KEY_COUNT)
     {
         return;
     }
+
+#if APL_HMI_COMPILE_KEYMAP
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        action = apl_hmi_mapped_action(state, index, is_long);
+        if ((0u != locked) && (APL_KEY_ACTION_CHILD_LOCK_TOGGLE != action))
+        {
+            return;
+        }
+        /* 事件保持原始槽位，包括 NONE/不可用动作，便于宿主检测输入。 */
+        if ((NULL != state->ops) && (NULL != state->ops->key_event))
+        {
+            state->ops->key_event((enum apl_hmi_key_id)index, is_long, state->ctx);
+        }
+        if (0u != apl_hmi_action_available(state, action))
+        {
+            apl_hmi_panel_key(self, state, index, is_long);
+        }
+        return;
+    }
+#endif
 
     if (((0u == is_long) || (APL_HMI_KEY_FILTER == index))
         && (0u != apl_hmi_lamp_forced_off(state, index)))
@@ -482,14 +699,17 @@ static void apl_hmi_emit(struct apl_hmi *self,
         return;
     }
 
+#if APL_HMI_COMPILE_KEY_CALLBACKS
     key = &state->key[index];
     callback = (0u != is_long) ? key->on_long : key->on_short;
     if (NULL != callback)
     {
         callback(self, key->ctx);
     }
+#endif
 }
 
+#if APL_HMI_COMBO_MAX > 0
 static uint8_t apl_hmi_mask_held(uint8_t down_mask, uint8_t key_mask) APL_CALL
 {
     if (0u == key_mask)
@@ -564,19 +784,20 @@ static uint8_t apl_hmi_combos_update(struct apl_hmi *self,
 
     return suppress;
 }
+#endif
 
 /** D21：仅在定时设置中武装连增，设置外3秒长按仍负责童锁。 */
+#if APL_COMPILE_TIMER
 static void apl_hmi_timer_repeat(struct apl_hmi_state *state,
                                  struct apl_hmi_key_track *track,
                                  uint8_t down_mask,
                                  uint8_t suppress,
-                                 uint8_t locked) APL_CALL
+                                 uint8_t locked,
+                                 uint8_t timer_bit) APL_CALL
 {
     struct apl_hmi_panel *panel;
-    uint8_t timer_bit;
 
     panel = &state->panel;
-    timer_bit = apl_hmi_key_bit(APL_HMI_KEY_TIMER);
     if (0u == track->down)
     {
         panel->timer_editing = ((NULL != panel->send) && (0u != panel->snap_valid)
@@ -610,6 +831,8 @@ static void apl_hmi_timer_repeat(struct apl_hmi_state *state,
     }
 }
 
+#endif
+
 static void apl_hmi_keys_resolve(struct apl_hmi *self,
                                  struct apl_hmi_state *state,
                                  uint8_t down_mask,
@@ -629,10 +852,18 @@ static void apl_hmi_keys_resolve(struct apl_hmi *self,
         down = (uint8_t)(0u != (down_mask & key_bit));
         if (0u != down)
         {
-            if (APL_HMI_KEY_TIMER == index)
+#if APL_COMPILE_TIMER
+            if (
+#if APL_HMI_COMPILE_KEYMAP
+                (0u != apl_hmi_keymap_active(state))
+                ? (APL_KEY_ACTION_TIMER_EDIT == apl_hmi_mapped_action(state, index, 0u))
+                :
+#endif
+                  (APL_HMI_KEY_TIMER == index))
             {
-                apl_hmi_timer_repeat(state, track, down_mask, suppress, locked);
+                apl_hmi_timer_repeat(state, track, down_mask, suppress, locked, key_bit);
             }
+#endif
             if ((APL_HMI_GESTURE_OPEN == track->gesture)
                 && (0u == (suppress & key_bit))
                 && (track->down_ticks >= APL_HMI_LONG_PRESS_TICKS))
@@ -655,10 +886,18 @@ static void apl_hmi_keys_resolve(struct apl_hmi *self,
                 }
             }
 
-            if (APL_HMI_KEY_TIMER == index)
+#if APL_COMPILE_TIMER
+            if (
+#if APL_HMI_COMPILE_KEYMAP
+                (0u != apl_hmi_keymap_active(state))
+                ? (APL_KEY_ACTION_TIMER_EDIT == apl_hmi_mapped_action(state, index, 0u))
+                :
+#endif
+                  (APL_HMI_KEY_TIMER == index))
             {
                 state->panel.timer_editing = 0u;
             }
+#endif
             track->down_ticks = 0u;
             track->gesture = APL_HMI_GESTURE_OPEN;
         }
@@ -713,10 +952,45 @@ void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx
     state->powerup_lamp_ticks = APL_HMI_POWERUP_LAMP_TICKS;
     apl_hmi_powerup_show(state);
     /* 原表：上电蜂鸣一声。 */
+#if APL_HMI_COMPILE_BUZZER
     state->buzz_count = 1u;
     state->buzz_on_ticks = APL_HMI_BEEP_SHORT_MS / APL_HMI_TICK_MS;
     state->buzz_off_ticks = 0u;
+#endif
 }
+
+#if APL_HMI_COMPILE_KEYMAP
+void apl_hmi_set_keymap(struct apl_hmi *self, const struct apl_keymap *keymap) APL_CALL
+{
+    if (NULL != self)
+    {
+        apl_hmi_state_of(self)->keymap = ((NULL != keymap) && (0u != keymap->enabled)) ? keymap : NULL;
+    }
+}
+#endif
+
+#if APL_HMI_COMPILE_AMBIENT
+static void apl_hmi_apply_ambient(struct apl_hmi_state *state) APL_CALL
+{
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    if ((NULL == state->ops) || (NULL == state->ops->set_ambient_rgb)) { return; }
+    red = (uint8_t)(((uint16_t)state->ambient_red * state->ambient_brightness + 127u) / 255u);
+    green = (uint8_t)(((uint16_t)state->ambient_green * state->ambient_brightness + 127u) / 255u);
+    blue = (uint8_t)(((uint16_t)state->ambient_blue * state->ambient_brightness + 127u) / 255u);
+    if ((0u == state->ambient_output_valid) || (red != state->ambient_out_red)
+        || (green != state->ambient_out_green) || (blue != state->ambient_out_blue))
+    {
+        state->ambient_output_valid = 1u;
+        state->ambient_out_red = red;
+        state->ambient_out_green = green;
+        state->ambient_out_blue = blue;
+        state->ops->set_ambient_rgb(red, green, blue, state->ctx);
+    }
+}
+
+#endif
 
 void apl_hmi_tick(struct apl_hmi *self) APL_CALL
 {
@@ -738,7 +1012,11 @@ void apl_hmi_tick(struct apl_hmi *self) APL_CALL
         state->ops->get_key_state(&keys, state->ctx);
         down_mask = apl_hmi_sample(state, &keys);
         locked = (uint8_t)(APL_HMI_CHILD_LOCK_ON == state->child_lock);
+#if APL_HMI_COMBO_MAX > 0
         suppress = apl_hmi_combos_update(self, state, down_mask, locked);
+#else
+        suppress = 0u;
+#endif
         apl_hmi_keys_resolve(self, state, down_mask, suppress, locked);
         state->panel.keys_down = down_mask;
     }
@@ -750,7 +1028,12 @@ void apl_hmi_tick(struct apl_hmi *self) APL_CALL
 
     apl_hmi_powerup_tick(state);
     apl_hmi_force_disabled_lamps(state);
+#if APL_HMI_COMPILE_BUZZER
     apl_hmi_buzzer_tick(state);
+#endif
+#if APL_HMI_COMPILE_AMBIENT
+    apl_hmi_apply_ambient(state);
+#endif
 }
 
 uint8_t apl_hmi_get_powerup_lamp(const struct apl_hmi *self) APL_CALL
@@ -791,6 +1074,7 @@ uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key
     return apl_hmi_state_of_const(self)->key[key].brightness;
 }
 
+#if APL_HMI_COMPILE_KEY_CALLBACKS
 void apl_hmi_set_key_callback(struct apl_hmi *self,
                               enum apl_hmi_key_id key,
                               void (*on_short)(struct apl_hmi *key_self, void *key_ctx) APL_CALL,
@@ -809,7 +1093,9 @@ void apl_hmi_set_key_callback(struct apl_hmi *self,
     slot->on_long = on_long;
     slot->ctx = ctx;
 }
+#endif
 
+#if APL_HMI_COMPILE_AMBIENT
 void apl_hmi_set_ambient_brightness(struct apl_hmi *self, uint8_t brightness) APL_CALL
 {
     if (NULL == self)
@@ -886,6 +1172,8 @@ void apl_hmi_get_ambient_color(const struct apl_hmi *self,
     }
 }
 
+#endif
+
 void apl_hmi_set_water_lamp(struct apl_hmi *self, uint8_t index, uint8_t brightness) APL_CALL
 {
     if ((NULL == self) || (0u == index) || (index > APL_HMI_WATER_LAMP_COUNT))
@@ -935,6 +1223,44 @@ void apl_hmi_set_digits_content(struct apl_hmi *self,
     }
 
     memcpy(apl_hmi_state_of(self)->digit_content, content, APL_HMI_DIGIT_COUNT);
+}
+
+uint8_t apl_hmi_get_digit_segments(const struct apl_hmi *self, uint8_t index) APL_CALL
+{
+    char value;
+    if ((NULL == self) || (index >= APL_HMI_DIGIT_COUNT)) { return 0u; }
+    value = apl_hmi_state_of_const(self)->digit_content[index];
+    switch (value)
+    {
+    case '0': case 'O': return 0x3Fu;
+    case '1': return 0x06u;
+    case '2': return 0x5Bu;
+    case '3': return 0x4Fu;
+    case '4': return 0x66u;
+    case '5': return 0x6Du;
+    case '6': return 0x7Du;
+    case '7': return 0x07u;
+    case '8': return 0x7Fu;
+    case '9': return 0x6Fu;
+    case 'A': return 0x77u;
+    case 'b': return 0x7Cu;
+    case 'C': return 0x39u;
+    case 'c': return 0x58u;
+    case 'd': return 0x5Eu;
+    case 'E': return 0x79u;
+    case 'F': return 0x71u;
+    case 'H': return 0x76u;
+    case 'h': return 0x74u;
+    case 'L': return 0x38u;
+    case 'o': return 0x5Cu;
+    case 'P': return 0x73u;
+    case 'U': return 0x3Eu;
+    case 'u': return 0x1Cu;
+    case '^': return 0x01u;
+    case '-': return 0x40u;
+    case '_': return 0x08u;
+    default: return 0u;
+    }
 }
 
 void apl_hmi_get_digits_content(const struct apl_hmi *self,
@@ -1034,6 +1360,7 @@ uint8_t apl_hmi_get_humidify_enabled(const struct apl_hmi *self) APL_CALL
     return apl_hmi_state_of_const(self)->humidify_enabled;
 }
 
+#if APL_HMI_COMBO_MAX > 0
 int apl_hmi_set_combo(struct apl_hmi *self,
                       const enum apl_hmi_key_id *keys,
                       uint8_t key_count,
@@ -1111,6 +1438,7 @@ int apl_hmi_set_combo(struct apl_hmi *self,
     slot->ctx = ctx;
     return 0;
 }
+#endif
 
 static uint8_t apl_hmi_icon_is_valid(enum apl_hmi_icon icon) APL_CALL
 {
@@ -1157,6 +1485,7 @@ enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self) APL
     return apl_hmi_state_of_const(self)->water_color;
 }
 
+#if APL_HMI_COMPILE_BUZZER
 static uint16_t apl_hmi_ms_to_ticks(uint16_t ms) APL_CALL
 {
     return (uint16_t)((ms + APL_HMI_TICK_MS - 1u) / APL_HMI_TICK_MS);
@@ -1244,26 +1573,49 @@ static void apl_hmi_beep_play(struct apl_hmi_state *state, enum apl_beep beep) A
     case APL_BEEP_SHORT:
         apl_hmi_play(state, 1u, APL_HMI_BEEP_SHORT_MS, 0u);
         break;
+#if APL_COMPILE_FILTER
     case APL_BEEP_FILTER_RESET:
+#endif
+#if APL_COMPILE_FACTORY
     case APL_BEEP_FACTORY:
+#endif
+#if (APL_COMPILE_FILTER || APL_COMPILE_FACTORY)
         apl_hmi_play(state, 1u, 500u, 0u);
         break;
+#endif
+#if APL_COMPILE_FILTER
     case APL_BEEP_FILTER_FORCED:
+#endif
+#if APL_COMPILE_HUMIDIFY
     case APL_BEEP_WATER_85:
+#endif
+#if (APL_COMPILE_FILTER || APL_COMPILE_HUMIDIFY)
         apl_hmi_play(state, 1u, 300u, 0u);
         break;
+#endif
+#if APL_COMPILE_HUMIDIFY
     case APL_BEEP_WATER_FULL:
         apl_hmi_play(state, 4u, 100u, 100u);
         break;
+#endif
+#if APL_COMPILE_HUMIDIFY
     case APL_BEEP_WATER_SHORTAGE:
+#endif
+#if APL_COMPILE_UV
     case APL_BEEP_UV_ALARM:
+#endif
+#if (APL_COMPILE_HUMIDIFY || APL_COMPILE_UV)
         apl_hmi_play(state, 3u, 100u, 100u);
         break;
+#endif
     default:
         break;
     }
 }
 
+#endif
+
+#if (APL_COMPILE_TIMER || APL_COMPILE_FILTER || APL_COMPILE_HUMIDIFY || APL_COMPILE_WIFI)
 static uint8_t apl_hmi_blink(uint32_t clock, uint16_t on_ms, uint16_t off_ms) APL_CALL
 {
     uint32_t period;
@@ -1277,6 +1629,9 @@ static uint8_t apl_hmi_blink(uint32_t clock, uint16_t on_ms, uint16_t off_ms) AP
     return ((clock % period) < ((uint32_t)on_ms / APL_HMI_TICK_MS)) ? 1u : 0u;
 }
 
+#endif
+
+#if (APL_COMPILE_TIMER || APL_COMPILE_FILTER || APL_COMPILE_HUMIDIFY || APL_COMPILE_SENSOR_PM25 || APL_COMPILE_SENSOR_HUMIDITY)
 static void apl_hmi_digits_number(struct apl_hmi_state *state, uint16_t value) APL_CALL
 {
     uint8_t index;
@@ -1301,6 +1656,8 @@ static void apl_hmi_digits_number(struct apl_hmi_state *state, uint16_t value) A
     }
 }
 
+#endif
+
 static void apl_hmi_digits_text(struct apl_hmi_state *state, char a, char b, char c) APL_CALL
 {
     state->digit_content[0] = a;
@@ -1308,10 +1665,13 @@ static void apl_hmi_digits_text(struct apl_hmi_state *state, char a, char b, cha
     state->digit_content[2] = c;
 }
 
+#if (APL_COMPILE_HUMIDIFY || APL_HMI_HAS_ROTATE)
 static uint8_t apl_hmi_panel_combo_model(const struct apl_link_snapshot *snap) APL_CALL
 {
     return ((0u != snap->purify_enabled) && (0u != snap->humidify_enabled)) ? 1u : 0u;
 }
+
+#endif
 
 static void apl_hmi_panel_send(struct apl_hmi_state *state,
                                enum apl_link_command_type type,
@@ -1334,15 +1694,25 @@ static uint8_t apl_hmi_panel_dark(const struct apl_hmi_state *state) APL_CALL
         return 0u;
     }
 
-    return (((0u != panel->light_off) || (0u != panel->snap.sleep)) && (0u == panel->wake_ticks))
+    return (((0u != panel->light_off)
+#if APL_COMPILE_SLEEP
+             || (0u != panel->snap.sleep)
+#endif
+            ) && (0u == panel->wake_ticks))
            ? 1u : 0u;
 }
 
 static uint16_t apl_hmi_panel_wake_window(const struct apl_hmi_panel *panel) APL_CALL
 {
+#if APL_COMPILE_SLEEP
     return (0u != panel->snap.sleep) ? APL_HMI_SLEEP_IDLE_TICKS : APL_HMI_IDLE_TICKS;
+#else
+    APL_UNUSED_PARAM(panel);
+    return APL_HMI_IDLE_TICKS;
+#endif
 }
 
+#if APL_COMPILE_HUMIDIFY
 static uint8_t apl_hmi_humidity_next(uint8_t value, uint8_t with_off) APL_CALL
 {
     if (APL_HUMIDITY_TARGET_OFF == value)
@@ -1358,9 +1728,14 @@ static uint8_t apl_hmi_humidity_next(uint8_t value, uint8_t with_off) APL_CALL
     return (uint8_t)(value + APL_HMI_HUMIDITY_STEP);
 }
 
+#endif
+
+#if APL_COMPILE_TIMER
 static void apl_hmi_panel_timer_key(struct apl_hmi_state *state) APL_CALL
 {
     struct apl_hmi_panel *panel;
+    uint8_t step;
+    uint16_t next;
 
     panel = &state->panel;
     if (APL_RUN_ON != panel->snap.run_state)
@@ -1368,6 +1743,8 @@ static void apl_hmi_panel_timer_key(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+    step = ((0u != panel->snap.timer_step_h) && (panel->snap.timer_step_h <= APL_HMI_TIMER_MAX_H))
+           ? panel->snap.timer_step_h : APL_TIMER_STEP_DEFAULT_H;
     if (APL_HMI_SETTING_TIMER != panel->setting)
     {
         panel->setting = APL_HMI_SETTING_TIMER;
@@ -1380,18 +1757,21 @@ static void apl_hmi_panel_timer_key(struct apl_hmi_state *state) APL_CALL
         }
         else
         {
-            panel->setting_value = 1u;
+            panel->setting_value = step;
         }
     }
     else
     {
-        panel->setting_value = (panel->setting_value >= APL_HMI_TIMER_MAX_H)
-                               ? 0u : (uint8_t)(panel->setting_value + 1u);
+        next = (uint16_t)((uint16_t)panel->setting_value + step);
+        panel->setting_value = (next > APL_HMI_TIMER_MAX_H) ? 0u : (uint8_t)next;
     }
 
     panel->setting_ticks = APL_HMI_IDLE_TICKS;
 }
 
+#endif
+
+#if APL_COMPILE_HUMIDIFY
 static void apl_hmi_panel_humidity_short(struct apl_hmi_state *state) APL_CALL
 {
     struct apl_hmi_panel *panel;
@@ -1419,6 +1799,119 @@ static void apl_hmi_panel_humidity_short(struct apl_hmi_state *state) APL_CALL
     panel->setting_ticks = APL_HMI_IDLE_TICKS;
 }
 
+#endif
+
+#if APL_HMI_COMPILE_KEYMAP
+/** 自定义映射只更换语义动作，仍使用标准唤醒、设置和主控命令规则。 */
+static void apl_hmi_panel_action(struct apl_hmi_state *state, uint8_t action) APL_CALL
+{
+    struct apl_hmi_panel *panel;
+
+    panel = &state->panel;
+    if ((0u != apl_hmi_panel_dark(state))
+#if APL_COMPILE_SLEEP
+        && !((APL_KEY_ACTION_POWER == action) && (APL_FAN_GEAR_SLEEP == panel->snap.fan_gear))
+#endif
+       )
+    {
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
+        return;
+    }
+    if (0u != panel->wake_ticks)
+    {
+        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
+    }
+    switch (action)
+    {
+    case APL_KEY_ACTION_POWER:
+#if APL_COMPILE_FACTORY
+        if (APL_RUN_FACTORY == panel->snap.run_state)
+        {
+            apl_hmi_panel_send(state, APL_LINK_CMD_FACTORY_EXIT, 0u);
+        }
+        else
+#endif
+        {
+            panel->setting = APL_HMI_SETTING_NONE;
+            apl_hmi_panel_send(state, APL_LINK_CMD_POWER, 0u);
+        }
+        break;
+#if APL_COMPILE_DRY
+    case APL_KEY_ACTION_DRY_STOP:
+        apl_hmi_panel_send(state, APL_LINK_CMD_DRY_STOP, 0u);
+        break;
+#endif
+    case APL_KEY_ACTION_FAN_CYCLE:
+        apl_hmi_panel_send(state, APL_LINK_CMD_FAN_CYCLE, 0u);
+        break;
+#if APL_CORE_HAS_TURBO
+    case APL_KEY_ACTION_TURBO_TOGGLE:
+        apl_hmi_panel_send(state, APL_LINK_CMD_TURBO_TOGGLE, 0u);
+        break;
+#endif
+#if (APL_COMPILE_UV || APL_COMPILE_ANION)
+    case APL_KEY_ACTION_PURIFY_TOGGLE:
+        apl_hmi_panel_send(state, APL_LINK_CMD_PURIFY_TOGGLE, 0u);
+        break;
+#endif
+#if APL_COMPILE_WIFI
+    case APL_KEY_ACTION_WIFI_PAIR:
+        apl_hmi_panel_send(state, APL_LINK_CMD_WIFI_PAIR, 0u);
+        break;
+#endif
+#if APL_COMPILE_TIMER
+    case APL_KEY_ACTION_TIMER_EDIT:
+        apl_hmi_panel_timer_key(state);
+        break;
+#endif
+    case APL_KEY_ACTION_CHILD_LOCK_TOGGLE:
+        state->child_lock = (APL_HMI_CHILD_LOCK_ON == state->child_lock)
+                            ? APL_HMI_CHILD_LOCK_OFF : APL_HMI_CHILD_LOCK_ON;
+        break;
+    case APL_KEY_ACTION_LIGHT_TOGGLE:
+        if (APL_RUN_ON == panel->snap.run_state)
+        {
+            panel->light_off = (0u == panel->light_off) ? 1u : 0u;
+            panel->wake_ticks = 0u;
+        }
+        break;
+#if APL_COMPILE_HUMIDIFY
+    case APL_KEY_ACTION_HUMIDITY_CYCLE:
+        apl_hmi_panel_humidity_short(state);
+        break;
+    case APL_KEY_ACTION_HUMIDITY_EDIT:
+        panel->setting = APL_HMI_SETTING_HUMIDITY;
+        panel->setting_value = panel->snap.humidity_target;
+        panel->setting_ticks = APL_HMI_IDLE_TICKS;
+        break;
+    case APL_KEY_ACTION_HUMIDIFY_TOGGLE:
+        apl_hmi_panel_send(state, APL_LINK_CMD_HUMIDIFY_TOGGLE, 0u);
+        break;
+#endif
+#if APL_COMPILE_FILTER
+    case APL_KEY_ACTION_FILTER_QUERY:
+    case APL_KEY_ACTION_FILTER_RESET_QUERY:
+        if ((APL_RUN_ON == panel->snap.run_state) || (APL_RUN_STANDBY == panel->snap.run_state))
+        {
+            if (APL_KEY_ACTION_FILTER_RESET_QUERY == action)
+            {
+                apl_hmi_panel_send(state, APL_LINK_CMD_FILTER_RESET, 0u);
+            }
+            panel->query_ticks = APL_HMI_IDLE_TICKS;
+        }
+        break;
+#endif
+#if APL_COMPILE_SLEEP
+    case APL_KEY_ACTION_SLEEP_TOGGLE:
+        apl_hmi_panel_send(state, APL_LINK_CMD_SLEEP_TOGGLE, 0u);
+        break;
+#endif
+    default:
+        break;
+    }
+}
+#endif
+
 static void apl_hmi_panel_key(struct apl_hmi *self,
                               struct apl_hmi_state *state,
                               uint8_t index,
@@ -1429,10 +1922,21 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
     panel = &state->panel;
     APL_UNUSED_PARAM(self);
 
+#if APL_HMI_COMPILE_KEYMAP
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        apl_hmi_panel_action(state, apl_hmi_mapped_action(state, index, is_long));
+        return;
+    }
+#endif
+
     /* 更改记录D23：睡眠熄屏的电源键直接执行；其他键先唤醒。
      * 非睡眠灯光关闭仍保留既有唤醒策略，灯位冲突另行确认。 */
     if ((0u != apl_hmi_panel_dark(state))
-        && !((APL_HMI_KEY_POWER == index) && (APL_FAN_GEAR_SLEEP == panel->snap.fan_gear)))
+#if APL_COMPILE_SLEEP
+        && !((APL_HMI_KEY_POWER == index) && (APL_FAN_GEAR_SLEEP == panel->snap.fan_gear))
+#endif
+       )
     {
         panel->wake_ticks = apl_hmi_panel_wake_window(panel);
         return;
@@ -1448,12 +1952,16 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
     case APL_HMI_KEY_POWER:
         if (0u != is_long)
         {
+#if APL_COMPILE_DRY
             apl_hmi_panel_send(state, APL_LINK_CMD_DRY_STOP, 0u);
+#endif
         }
+#if APL_COMPILE_FACTORY
         else if (APL_RUN_FACTORY == panel->snap.run_state)
         {
             apl_hmi_panel_send(state, APL_LINK_CMD_FACTORY_EXIT, 0u);
         }
+#endif
         else
         {
             panel->setting = APL_HMI_SETTING_NONE;
@@ -1461,20 +1969,26 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
         }
         break;
     case APL_HMI_KEY_SPEED:
-        apl_hmi_panel_send(state, (0u != is_long) ? APL_LINK_CMD_TURBO_TOGGLE
-                                                  : APL_LINK_CMD_FAN_CYCLE, 0u);
+        if (0u == is_long) { apl_hmi_panel_send(state, APL_LINK_CMD_FAN_CYCLE, 0u); }
+#if APL_CORE_HAS_TURBO
+        else { apl_hmi_panel_send(state, APL_LINK_CMD_TURBO_TOGGLE, 0u); }
+#endif
         break;
     case APL_HMI_KEY_PURIFY:
         if (0u != is_long)
         {
+#if APL_COMPILE_WIFI
             if (0u != panel->snap.wifi_enabled)
             {
                 apl_hmi_panel_send(state, APL_LINK_CMD_WIFI_PAIR, 0u);
             }
+#endif
         }
         else
         {
+#if (APL_COMPILE_UV || APL_COMPILE_ANION)
             apl_hmi_panel_send(state, APL_LINK_CMD_PURIFY_TOGGLE, 0u);
+#endif
         }
         break;
     case APL_HMI_KEY_TIMER:
@@ -1485,7 +1999,9 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
         }
         else
         {
+#if APL_COMPILE_TIMER
             apl_hmi_panel_timer_key(state);
+#endif
         }
         break;
     case APL_HMI_KEY_LIGHT:
@@ -1500,6 +2016,7 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
             /* 待机、风干时灯光键无作用。 */
         }
         break;
+#if APL_COMPILE_FILTER
     case APL_HMI_KEY_FILTER:
         if ((0u != panel->snap.purify_enabled) && (0u == panel->snap.humidify_enabled)
             && ((APL_RUN_ON == panel->snap.run_state) || (APL_RUN_STANDBY == panel->snap.run_state)))
@@ -1511,6 +2028,8 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
             panel->query_ticks = APL_HMI_IDLE_TICKS;
         }
         break;
+#endif
+#if APL_COMPILE_HUMIDIFY
     case APL_HMI_KEY_HUMIDITY:
         if (0u == is_long)
         {
@@ -1527,11 +2046,14 @@ static void apl_hmi_panel_key(struct apl_hmi *self,
             /* 加湿器恒湿键没有长按。 */
         }
         break;
+#endif
     default:
         break;
     }
 }
 
+#if APL_HMI_COMBO_MAX > 0
+#if APL_COMPILE_FILTER
 static void apl_hmi_panel_combo_filter(struct apl_hmi *self, void *ctx) APL_CALL
 {
     struct apl_hmi_state *state;
@@ -1545,11 +2067,17 @@ static void apl_hmi_panel_combo_filter(struct apl_hmi *self, void *ctx) APL_CALL
     }
 }
 
+#endif
+
+#if APL_COMPILE_FACTORY
 static void apl_hmi_panel_combo_factory(struct apl_hmi *self, void *ctx) APL_CALL
 {
     APL_UNUSED_PARAM(ctx);
     apl_hmi_panel_send(apl_hmi_state_of(self), APL_LINK_CMD_FACTORY_ENTER, 0u);
 }
+#endif
+
+#endif
 
 static void apl_hmi_panel_confirm(struct apl_hmi_state *state) APL_CALL
 {
@@ -1572,11 +2100,15 @@ static void apl_hmi_panel_confirm(struct apl_hmi_state *state) APL_CALL
 
     if (APL_HMI_SETTING_TIMER == panel->setting)
     {
+#if APL_COMPILE_TIMER
         apl_hmi_panel_send(state, APL_LINK_CMD_TIMER_SET, panel->setting_value);
+#endif
     }
     else
     {
+#if APL_COMPILE_HUMIDIFY
         apl_hmi_panel_send(state, APL_LINK_CMD_HUMIDITY_TARGET, panel->setting_value);
+#endif
     }
 
     panel->setting = APL_HMI_SETTING_NONE;
@@ -1601,7 +2133,9 @@ static void apl_hmi_panel_clear(struct apl_hmi_state *state) APL_CALL
         state->water[index] = 0u;
     }
 
+#if APL_HMI_COMPILE_AMBIENT
     state->ambient_brightness = 0u;
+#endif
     state->digit_brightness = 0u;
     state->digit_unit = APL_HMI_UNIT_NONE;
     apl_hmi_digits_text(state, ' ', ' ', ' ');
@@ -1612,6 +2146,7 @@ static uint8_t apl_hmi_on(uint8_t cond) APL_CALL
     return (0u != cond) ? APL_HMI_LAMP_FULL : 0u;
 }
 
+#if APL_COMPILE_FILTER
 static uint8_t apl_hmi_panel_filter_expired(const struct apl_link_snapshot *snap) APL_CALL
 {
     if ((0u != snap->purify_enabled) && (APL_FILTER_EXPIRED == snap->filter_purify_left))
@@ -1647,6 +2182,9 @@ static void apl_hmi_panel_draw_filter(struct apl_hmi_state *state) APL_CALL
     state->icon[APL_HMI_ICON_FILTER_WHITE] = apl_hmi_on(0u == red);
 }
 
+#endif
+
+#if APL_COMPILE_HUMIDIFY
 static void apl_hmi_panel_draw_water(struct apl_hmi_state *state) APL_CALL
 {
     const struct apl_link_snapshot *snap;
@@ -1691,6 +2229,9 @@ static void apl_hmi_panel_draw_water(struct apl_hmi_state *state) APL_CALL
     }
 }
 
+#endif
+
+#if APL_HMI_COMPILE_AMBIENT
 static void apl_hmi_panel_draw_ambient(struct apl_hmi_state *state) APL_CALL
 {
     const struct apl_link_snapshot *snap;
@@ -1736,16 +2277,39 @@ static void apl_hmi_panel_draw_ambient(struct apl_hmi_state *state) APL_CALL
     }
 }
 
+#endif
+
+#if APL_HMI_HAS_ROTATE
+static uint32_t apl_hmi_panel_rotate_ticks(const struct apl_hmi_panel *panel) APL_CALL
+{
+    return (0u != panel->snap.display_rotate_s)
+        ? ((uint32_t)panel->snap.display_rotate_s * (1000UL / APL_HMI_TICK_MS))
+        : APL_HMI_ROTATE_TICKS;
+}
+
+#endif
+
 static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
 {
+#if (APL_COMPILE_TIMER || APL_COMPILE_HUMIDIFY || APL_COMPILE_FILTER || APL_HMI_HAS_WARMUP)
     struct apl_hmi_panel *panel;
+#endif
+#if (APL_COMPILE_FILTER || APL_HMI_HAS_WARMUP)
     const struct apl_link_snapshot *snap;
+#endif
+#if APL_COMPILE_SENSOR_HUMIDITY
     uint8_t show_humidity;
+#endif
 
+#if (APL_COMPILE_TIMER || APL_COMPILE_HUMIDIFY || APL_COMPILE_FILTER || APL_HMI_HAS_WARMUP)
     panel = &state->panel;
+#endif
+#if (APL_COMPILE_FILTER || APL_HMI_HAS_WARMUP)
     snap = &panel->snap;
+#endif
     state->digit_brightness = APL_HMI_LAMP_FULL;
 
+#if APL_COMPILE_TIMER
     if (APL_HMI_SETTING_TIMER == panel->setting)
     {
         apl_hmi_digits_number(state, panel->setting_value);
@@ -1756,6 +2320,8 @@ static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+#endif
+#if APL_COMPILE_HUMIDIFY
     if (APL_HMI_SETTING_HUMIDITY == panel->setting)
     {
         if (APL_HUMIDITY_TARGET_OFF == panel->setting_value)
@@ -1772,6 +2338,8 @@ static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+#endif
+#if APL_COMPILE_FILTER
     if (0u != panel->query_ticks)
     {
         apl_hmi_digits_number(state, (0u != snap->purify_enabled) ? snap->filter_purify_left
@@ -1780,84 +2348,118 @@ static void apl_hmi_panel_draw_digits(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+#endif
+#if APL_COMPILE_SENSOR_PM25
     if ((0u != snap->purify_enabled) && (0u != (snap->sensor_faults & APL_SENSOR_PM25_MASK)))
     {
         apl_hmi_digits_text(state, ' ', 'E', '9');
         state->digit_unit = APL_HMI_UNIT_NONE;
         return;
     }
+#endif
+#if APL_HMI_HAS_WARMUP
     if (0u != snap->sensors_warming)
     {
-        apl_hmi_digits_text(state, ' ', '-', '-');
+        char bar;
+        uint16_t phase;
+        phase = (uint16_t)(panel->warmup_animation_ticks / APL_HMI_WARMUP_FRAME_TICKS);
+        bar = (0u == phase) ? '^' : ((1u == phase) ? '-' : '_');
+        apl_hmi_digits_text(state, bar, bar, bar);
         state->digit_unit = APL_HMI_UNIT_NONE;
         return;
     }
+#endif
+#if APL_COMPILE_SENSOR_HUMIDITY
+#if APL_COMPILE_SENSOR_PM25
     show_humidity = (0u == snap->purify_enabled) ? 1u : 0u;
+#else
+    show_humidity = 1u;
+#endif
+#if APL_HMI_HAS_ROTATE
     if (0u != apl_hmi_panel_combo_model(snap))
-    {
-        show_humidity = (panel->rotate_ticks >= APL_HMI_ROTATE_TICKS) ? 1u : 0u;
-    }
-
+    { show_humidity = (panel->rotate_ticks >= apl_hmi_panel_rotate_ticks(panel)) ? 1u : 0u; }
+#endif
     if (0u != show_humidity)
     {
         if (0u != (snap->sensors_ready & APL_SENSOR_HUMIDITY_MASK))
-        {
-            apl_hmi_digits_number(state, snap->humidity);
-        }
-        else
-        {
-            /* 湿度故障E1/E2冲突待确认，不伪造随机湿度或选定故障码。 */
-            apl_hmi_digits_text(state, ' ', '-', '-');
-        }
+        { apl_hmi_digits_number(state, snap->humidity); }
+        else { apl_hmi_digits_text(state, ' ', '-', '-'); }
         state->digit_unit = APL_HMI_UNIT_PERCENT;
+        return;
     }
-    else
-    {
-        if (0u != (snap->sensors_ready & APL_SENSOR_PM25_MASK))
-        {
-            apl_hmi_digits_number(state, snap->pm25);
-        }
-        else
-        {
-            apl_hmi_digits_text(state, ' ', '-', '-');
-        }
-        state->digit_unit = APL_HMI_UNIT_PM25;
-    }
+#endif
+#if APL_COMPILE_SENSOR_PM25
+    if (0u != (snap->sensors_ready & APL_SENSOR_PM25_MASK))
+    { apl_hmi_digits_number(state, snap->pm25); }
+    else { apl_hmi_digits_text(state, ' ', '-', '-'); }
+    state->digit_unit = APL_HMI_UNIT_PM25;
+#else
+    apl_hmi_digits_text(state, ' ', '-', '-');
+    state->digit_unit = APL_HMI_UNIT_NONE;
+#endif
 }
 
 static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
 {
     struct apl_hmi_panel *panel;
     const struct apl_link_snapshot *snap;
+#if APL_HMI_COMPILE_KEYMAP
+    uint8_t index;
+#endif
 
     panel = &state->panel;
     snap = &panel->snap;
 
-    /* 键下灯不受灯光开关影响。 */
-    state->key[APL_HMI_KEY_FILTER].brightness =
-        apl_hmi_on((0u != snap->purify_enabled) && (0u == snap->humidify_enabled));
-    state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_FULL;
-    state->key[APL_HMI_KEY_SPEED].brightness = APL_HMI_LAMP_FULL;
-    state->key[APL_HMI_KEY_PURIFY].brightness = apl_hmi_on(snap->purify_on);
-    state->key[APL_HMI_KEY_HUMIDITY].brightness = apl_hmi_on(snap->humidify_on);
-    state->key[APL_HMI_KEY_TIMER].brightness = apl_hmi_on(0u != snap->timer_left_s);
-    state->key[APL_HMI_KEY_LIGHT].brightness = apl_hmi_on(0u == panel->light_off);
+    /* 用户确认：手动关灯时所有灯位熄灭；首次触摸的临时唤醒仍可显示。 */
+    if ((0u != panel->light_off) && (0u != apl_hmi_panel_dark(state)))
+    {
+        return;
+    }
+
+    /* 显示开启时可用按键常亮；末尾统一屏蔽未配置功能。 */
+#if APL_HMI_COMPILE_KEYMAP
+    if (0u != apl_hmi_keymap_active(state))
+    {
+        for (index = 0u; index < APL_HMI_KEY_COUNT; index++)
+        {
+            state->key[index].brightness = apl_hmi_on(
+                (0u != apl_hmi_key_is_compiled((enum apl_hmi_key_id)index))
+                && (0u != apl_hmi_mapped_key_available(state, index)));
+        }
+    }
+    else
+#endif
+    {
+        state->key[APL_HMI_KEY_FILTER].brightness =
+            apl_hmi_on((0u != snap->purify_enabled) && (0u == snap->humidify_enabled));
+        state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_FULL;
+        state->key[APL_HMI_KEY_SPEED].brightness = APL_HMI_LAMP_FULL;
+        state->key[APL_HMI_KEY_PURIFY].brightness = APL_HMI_LAMP_FULL;
+        state->key[APL_HMI_KEY_HUMIDITY].brightness = APL_HMI_LAMP_FULL;
+        state->key[APL_HMI_KEY_TIMER].brightness = APL_HMI_LAMP_FULL;
+        state->key[APL_HMI_KEY_LIGHT].brightness =
+            apl_hmi_on((0u == panel->light_off) || (0u != panel->wake_ticks));
+    }
 
     if (0u != apl_hmi_panel_dark(state))
     {
         /* All three Sleep rows retain the Sleep indicator; other lamp policy is unchanged. */
+#if APL_COMPILE_SLEEP
         if (0u != snap->sleep)
         {
             state->icon[APL_HMI_ICON_GEAR_SLEEP] = APL_HMI_LAMP_FULL;
         }
+#endif
         return;
     }
 
     switch (snap->fan_gear)
     {
+#if APL_COMPILE_SLEEP
     case APL_FAN_GEAR_SLEEP:
         state->icon[APL_HMI_ICON_GEAR_SLEEP] = APL_HMI_LAMP_FULL;
         break;
+#endif
     case APL_FAN_GEAR_1:
         state->icon[APL_HMI_ICON_GEAR_1] = APL_HMI_LAMP_FULL;
         break;
@@ -1870,16 +2472,19 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
     case APL_FAN_GEAR_AUTO:
         state->icon[APL_HMI_ICON_GEAR_AUTO] = APL_HMI_LAMP_FULL;
         break;
+#if APL_CORE_HAS_TURBO
     case APL_FAN_GEAR_TURBO:
         /* 三机型极速条目：三档灯同时亮。 */
         state->icon[APL_HMI_ICON_GEAR_1] = APL_HMI_LAMP_FULL;
         state->icon[APL_HMI_ICON_GEAR_2] = APL_HMI_LAMP_FULL;
         state->icon[APL_HMI_ICON_GEAR_3] = APL_HMI_LAMP_FULL;
         break;
+#endif
     default:
         break;
     }
 
+#if APL_COMPILE_WIFI
     if (APL_WIFI_CONNECTED == snap->wifi)
     {
         state->icon[APL_HMI_ICON_WIFI] = APL_HMI_LAMP_FULL;
@@ -1895,16 +2500,30 @@ static void apl_hmi_panel_draw_on(struct apl_hmi_state *state) APL_CALL
         /* 未配网。 */
     }
 
+#endif
+
     state->icon[APL_HMI_ICON_LOCK] = apl_hmi_on(APL_HMI_CHILD_LOCK_ON == state->child_lock);
+#if APL_COMPILE_ANION
     state->icon[APL_HMI_ICON_ANION] = apl_hmi_on(APL_SWITCH_ON == snap->anion);
+#endif
+#if APL_COMPILE_UV
     state->icon[APL_HMI_ICON_UV] = apl_hmi_on(APL_SWITCH_ON == snap->uv);
+#endif
+#if APL_COMPILE_HUMIDIFY
     state->icon[APL_HMI_ICON_HUMIDITY] =
         apl_hmi_on((0u != snap->humidify_on)
                    && (0u != (snap->sensors_ready & APL_SENSOR_HUMIDITY_MASK))
                    && (APL_HUMIDITY_TARGET_OFF != snap->humidity_target));
+#endif
+#if APL_COMPILE_FILTER
     apl_hmi_panel_draw_filter(state);
+#endif
+#if APL_COMPILE_HUMIDIFY
     apl_hmi_panel_draw_water(state);
+#endif
+#if APL_HMI_COMPILE_AMBIENT
     apl_hmi_panel_draw_ambient(state);
+#endif
     apl_hmi_panel_draw_digits(state);
 }
 
@@ -1919,34 +2538,58 @@ static void apl_hmi_panel_draw(struct apl_hmi_state *state) APL_CALL
     case APL_RUN_ON:
         apl_hmi_panel_draw_on(state);
         break;
+#if APL_COMPILE_DRY
     case APL_RUN_DRY:
         /* 风干只亮电源键灯和风干图标。 */
-        state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_FULL;
+#if APL_HMI_COMPILE_KEYMAP
+        if (0u != apl_hmi_keymap_active(state))
+        {
+            apl_hmi_mapped_power_lamps(state, APL_HMI_LAMP_FULL);
+        }
+        else
+#endif
+        {
+            state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_FULL;
+        }
         state->icon[APL_HMI_ICON_DRY] = APL_HMI_LAMP_FULL;
         break;
+#endif
+#if APL_COMPILE_FACTORY
     case APL_RUN_FACTORY:
         /* 产测：全部灯光点亮供目检。逐个点亮的顺序尚未规定。 */
         apl_hmi_lamps_fill(state, APL_HMI_LAMP_FULL);
         apl_hmi_digits_text(state, '8', '8', '8');
         break;
+#endif
     default:
-        state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_HALF;
+#if APL_HMI_COMPILE_KEYMAP
+        if (0u != apl_hmi_keymap_active(state))
+        {
+            apl_hmi_mapped_power_lamps(state, APL_HMI_LAMP_HALF);
+        }
+        else
+#endif
+        {
+            state->key[APL_HMI_KEY_POWER].brightness = APL_HMI_LAMP_HALF;
+        }
+#if APL_COMPILE_FACTORY
         if (0u != panel->snap.factory_done)
         {
             apl_hmi_digits_text(state, ' ', 'C', 'L');
             state->digit_brightness = APL_HMI_LAMP_FULL;
         }
-        else if ((0u != panel->snap.purify_enabled) && (0u == panel->snap.humidify_enabled))
+#if APL_COMPILE_FILTER
+        else
+#endif
+#endif
+#if APL_COMPILE_FILTER
+        if ((0u != panel->snap.purify_enabled) && (0u == panel->snap.humidify_enabled))
         {
-            if (0u != panel->query_ticks)
-            {
-                apl_hmi_panel_draw_digits(state);
-            }
+            if (0u != panel->query_ticks) { apl_hmi_panel_draw_digits(state); }
             if ((0u != panel->query_ticks) || (0u != panel->red_blink_ticks))
-            {
-                apl_hmi_panel_draw_filter(state);
-            }
+            { apl_hmi_panel_draw_filter(state); }
         }
+#endif
         break;
     }
 }
@@ -1956,21 +2599,25 @@ static void apl_hmi_panel_events(struct apl_hmi_state *state) APL_CALL
 {
     struct apl_hmi_panel *panel;
     const struct apl_link_snapshot *snap;
-
     panel = &state->panel;
     snap = &panel->snap;
-
+#if (APL_HMI_COMPILE_BUZZER || APL_COMPILE_HUMIDIFY)
     if (snap->beep_seq != panel->last_beep_seq)
     {
         panel->last_beep_seq = snap->beep_seq;
+#if APL_HMI_COMPILE_BUZZER
         apl_hmi_beep_play(state, snap->beep);
+#endif
+#if APL_COMPILE_HUMIDIFY
         if (APL_BEEP_WATER_FULL == snap->beep)
         {
             panel->full_blink_ticks = (uint16_t)(APL_HMI_FULL_BLINK_TIMES * 2u
                                                  * APL_HMI_BLINK_FAST_MS / APL_HMI_TICK_MS);
         }
+#endif
     }
-
+#endif
+#if APL_COMPILE_FILTER
     if (snap->filter_reset_seq != panel->last_reset_seq)
     {
         panel->last_reset_seq = snap->filter_reset_seq;
@@ -1981,43 +2628,44 @@ static void apl_hmi_panel_events(struct apl_hmi_state *state) APL_CALL
                                                 * APL_HMI_BLINK_FAST_MS / APL_HMI_TICK_MS);
         }
     }
-
+#endif
     if ((APL_RUN_ON == snap->run_state) && (APL_RUN_ON != panel->prev_run))
     {
         panel->light_off = 0u;
+#if APL_HMI_HAS_ROTATE
         panel->rotate_ticks = 0u;
+#endif
+#if APL_HMI_HAS_WARMUP
+        panel->warmup_animation_ticks = 0u;
+#endif
+#if APL_COMPILE_FILTER
         if (0u != apl_hmi_panel_filter_expired(snap))
         {
-            /* 到期后开机：红灯闪 3 次后常亮。 */
             panel->red_blink_period = APL_HMI_BLINK_SLOW_MS;
             panel->red_blink_ticks = (uint16_t)(APL_HMI_BLINK_TIMES * 2u
                                                 * APL_HMI_BLINK_SLOW_MS / APL_HMI_TICK_MS);
         }
+#endif
     }
-
     if (APL_RUN_ON != snap->run_state)
     {
         panel->setting = APL_HMI_SETTING_NONE;
+#if APL_COMPILE_FILTER
         if ((APL_RUN_STANDBY != snap->run_state) || (APL_RUN_ON == panel->prev_run))
-        {
-            panel->query_ticks = 0u;
-        }
+        { panel->query_ticks = 0u; }
+#endif
     }
-
+#if APL_COMPILE_SLEEP
     if ((0u != snap->sleep) && (0u == panel->prev_sleep))
-    {
-        /* 进入睡眠：独立5秒无操作后熄灭状态显示。 */
-        panel->wake_ticks = apl_hmi_panel_wake_window(panel);
-    }
-
-    if ((APL_WATER_ALERT_BLINK == snap->water_alert) && (APL_WATER_ALERT_BLINK != panel->prev_alert))
-    {
-        panel->alert_clock = panel->clock;
-    }
-
-    panel->prev_alert = snap->water_alert;
-    panel->prev_run = snap->run_state;
+    { panel->wake_ticks = apl_hmi_panel_wake_window(panel); }
     panel->prev_sleep = snap->sleep;
+#endif
+#if APL_COMPILE_HUMIDIFY
+    if ((APL_WATER_ALERT_BLINK == snap->water_alert) && (APL_WATER_ALERT_BLINK != panel->prev_alert))
+    { panel->alert_clock = panel->clock; }
+    panel->prev_alert = snap->water_alert;
+#endif
+    panel->prev_run = snap->run_state;
 }
 
 static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL
@@ -2030,7 +2678,9 @@ static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL
         return;
     }
 
+#if APL_HMI_HAS_CLOCK
     panel->clock++;
+#endif
     apl_hmi_panel_events(state);
     apl_hmi_panel_confirm(state);
 
@@ -2047,28 +2697,39 @@ static void apl_hmi_panel_tick(struct apl_hmi_state *state) APL_CALL
         /* 已熄屏。 */
     }
 
-    if (0u != panel->query_ticks)
-    {
-        panel->query_ticks--;
-    }
+#if APL_COMPILE_FILTER
+    if (0u != panel->query_ticks) { panel->query_ticks--; }
+    if (0u != panel->red_blink_ticks) { panel->red_blink_ticks--; }
+#endif
+#if APL_COMPILE_HUMIDIFY
+    if (0u != panel->full_blink_ticks) { panel->full_blink_ticks--; }
+#endif
 
-    if (0u != panel->red_blink_ticks)
-    {
-        panel->red_blink_ticks--;
-    }
-
-    if (0u != panel->full_blink_ticks)
-    {
-        panel->full_blink_ticks--;
-    }
-
+#if APL_HMI_HAS_ROTATE
     panel->rotate_ticks++;
-    if (panel->rotate_ticks >= (uint16_t)(2u * APL_HMI_ROTATE_TICKS))
+    if (panel->rotate_ticks >= (2UL * apl_hmi_panel_rotate_ticks(panel)))
     {
         panel->rotate_ticks = 0u;
     }
 
+#endif
+
     apl_hmi_panel_draw(state);
+#if APL_HMI_HAS_WARMUP
+    if ((APL_RUN_ON == panel->snap.run_state) && (0u != panel->snap.sensors_warming))
+    {
+        panel->warmup_animation_ticks++;
+        if (panel->warmup_animation_ticks >= (3u * APL_HMI_WARMUP_FRAME_TICKS))
+        {
+            panel->warmup_animation_ticks = 0u;
+        }
+    }
+    else
+    {
+        panel->warmup_animation_ticks = 0u;
+    }
+#endif
+
 }
 
 void apl_hmi_link_bind(struct apl_hmi *self,
@@ -2077,8 +2738,14 @@ void apl_hmi_link_bind(struct apl_hmi *self,
                        void *ctx) APL_CALL
 {
     struct apl_hmi_state *state;
+#if APL_HMI_COMBO_MAX > 0
+#if APL_COMPILE_FILTER
     static const enum apl_hmi_key_id filter_keys[2] = { APL_HMI_KEY_TIMER, APL_HMI_KEY_SPEED };
+#endif
+#if APL_COMPILE_FACTORY
     static const enum apl_hmi_key_id factory_keys[2] = { APL_HMI_KEY_POWER, APL_HMI_KEY_TIMER };
+#endif
+#endif
 
     if (NULL == self)
     {
@@ -2093,31 +2760,47 @@ void apl_hmi_link_bind(struct apl_hmi *self,
         return;
     }
 
+#if APL_HMI_COMBO_MAX > 0
+#if APL_COMPILE_FILTER
     (void)apl_hmi_set_combo(self, filter_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
                             apl_hmi_panel_combo_filter, NULL);
+#endif
+#if APL_COMPILE_FACTORY
     (void)apl_hmi_set_combo(self, factory_keys, 2u, (uint16_t)APL_HMI_LONG_PRESS_MS,
                             apl_hmi_panel_combo_factory, NULL);
+#endif
+#endif
 }
 
-void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *snapshot) APL_CALL
+struct apl_link_snapshot *apl_hmi_snapshot_target(struct apl_hmi *self) APL_CALL
+{
+    return (NULL != self) ? &apl_hmi_state_of(self)->panel.snap : NULL;
+}
+
+void apl_hmi_snapshot_commit(struct apl_hmi *self) APL_CALL
 {
     struct apl_hmi_state *state;
+    const struct apl_link_snapshot *snapshot;
 
-    if ((NULL == self) || (NULL == snapshot))
+    if (NULL == self)
     {
         return;
     }
 
     state = apl_hmi_state_of(self);
+    snapshot = &state->panel.snap;
     if (0u == state->panel.snap_valid)
     {
         /* 第一份快照只作起点，不补播此前的提示音。 */
+#if (APL_HMI_COMPILE_BUZZER || APL_COMPILE_HUMIDIFY)
         state->panel.last_beep_seq = snapshot->beep_seq;
+#endif
+#if APL_COMPILE_FILTER
         state->panel.last_reset_seq = snapshot->filter_reset_seq;
+#endif
         state->panel.prev_run = APL_RUN_STANDBY;
     }
 
-    state->panel.snap = *snapshot;
     state->panel.snap_valid = 1u;
     if (NULL != state->panel.send)
     {
@@ -2127,6 +2810,17 @@ void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *
     }
 }
 
+void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *snapshot) APL_CALL
+{
+    if ((NULL == self) || (NULL == snapshot))
+    {
+        return;
+    }
+    apl_hmi_state_of(self)->panel.snap = *snapshot;
+    apl_hmi_snapshot_commit(self);
+}
+
+#if APL_COMPILE_FILTER
 void apl_hmi_filter_query(struct apl_hmi *self) APL_CALL
 {
     if (NULL == self)
@@ -2137,6 +2831,8 @@ void apl_hmi_filter_query(struct apl_hmi *self) APL_CALL
     apl_hmi_state_of(self)->panel.query_ticks = APL_HMI_IDLE_TICKS;
 }
 
+#endif
+
 uint8_t apl_hmi_get_light(const struct apl_hmi *self) APL_CALL
 {
     if (NULL == self)
@@ -2146,3 +2842,4 @@ uint8_t apl_hmi_get_light(const struct apl_hmi *self) APL_CALL
 
     return (0u == apl_hmi_state_of_const(self)->panel.light_off) ? 1u : 0u;
 }
+#endif /* APL_COMPILE_HMI */

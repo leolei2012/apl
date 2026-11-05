@@ -41,7 +41,7 @@ int main(void)
 {
     struct apl_core self; struct host host; struct apl_core_memory memory;
     memset(&host, 0, sizeof(host)); host.interlock = 1u;
-    apl_core_init(&self, &ops, &host); apl_core_power_on(&self); tick(&self, 100u);
+    apl_core_init(&self, &ops, &host); apl_core_power_on(&self); tick(&self, APL_CORE_SENSOR_WARMUP_MS / APL_CORE_TICK_MS);
     assert((APL_COMPILE_SENSOR_PM25 != 0) == (host.reads[0] > 0u));
     assert((APL_COMPILE_SENSOR_PM10 != 0) == (host.reads[1] > 0u));
     assert((APL_COMPILE_SENSOR_HCHO != 0) == (host.reads[2] > 0u));
@@ -70,7 +70,11 @@ int main(void)
     assert(APL_LINK_OK == cmd(&self, APL_LINK_CMD_ANION_SET, 0u)); tick(&self, 1u);
 #endif
     assert((APL_COMPILE_WIFI ? APL_LINK_OK : APL_LINK_REJECTED) == cmd(&self, APL_LINK_CMD_WIFI_PAIR, 0u));
-    apl_core_set_wifi_connected(&self, 1u); assert((APL_COMPILE_WIFI ? APL_WIFI_CONNECTED : APL_WIFI_OFF) == snapshot(&self).wifi);
+#if APL_COMPILE_WIFI
+    apl_core_set_wifi_connected(&self, 1u); assert(APL_WIFI_CONNECTED == snapshot(&self).wifi);
+#else
+    assert(APL_WIFI_OFF == snapshot(&self).wifi);
+#endif
     host.faults = 4u; tick(&self, 1u); assert(APL_WIFI_OFF == snapshot(&self).wifi); host.faults = 0u;
     /* Independent requests survive memory round trip; no raw-layout persistence is implied. */
     apl_core_get_memory(&self, &memory); assert(1u == memory.module_state_valid);

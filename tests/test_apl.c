@@ -281,31 +281,31 @@ static void test_core(void)
     EXPECT(0 == host.recover);
     host.water = APL_WATER_LEVEL_0;
     apl_core_tick(&core);
-    EXPECT(1 == host.trigger);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 1 : 0) == host.trigger);
     apl_core_tick(&core);
-    EXPECT(1 == host.trigger);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 1 : 0) == host.trigger);
     host.water = APL_WATER_LEVEL_1;
     apl_core_tick(&core);
-    EXPECT(1 == host.recover);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 1 : 0) == host.recover);
     host.water = APL_WATER_LEVEL_3;
     apl_core_tick(&core);
-    EXPECT(1 == host.recover);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 1 : 0) == host.recover);
     host.water = APL_WATER_LEVEL_0;
     apl_core_tick(&core);
-    EXPECT(2 == host.trigger);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 2 : 0) == host.trigger);
 
     host.force_bad_water = 1;
     apl_core_tick(&core);
     host.force_bad_water = 0;
     host.water = APL_WATER_LEVEL_2;
     apl_core_tick(&core);
-    EXPECT(2 == host.recover);
-    EXPECT(2 == host.trigger);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 2 : 0) == host.recover);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 2 : 0) == host.trigger);
 
     EXPECT(0 == host.uv_set_calls);
     EXPECT(0 == host.anion_set_calls);
-    /* 运行中每秒读一次 PM2.5，只在编入净化时。 */
-    EXPECT((0u != APL_COMPILE_PURIFY) == (0 < host.pm_reads));
+    /* 此处本次开机尚未满5秒，不能读取PM2.5正常值。 */
+    EXPECT(0u == host.pm_reads);
 
     apl_core_init(&core, NULL, NULL);
     apl_core_power_on(&core);
@@ -854,7 +854,7 @@ static void test_compose(void)
 
     core_host.water = APL_WATER_LEVEL_0;
     apl_tick(&machine);
-    EXPECT(1 == core_host.trigger);
+    EXPECT((APL_COMPILE_HUMIDIFY ? 1 : 0) == core_host.trigger);
     EXPECT(0 == core_host.pm_reads);
     EXPECT(0 == core_host.uv_set_calls);
     EXPECT(0 == core_host.anion_set_calls);

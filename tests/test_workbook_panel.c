@@ -15,6 +15,14 @@ static void command(struct apl *self, enum apl_link_command_type type, uint8_t a
 {
     struct apl_link_command c = {type, arg}; assert(APL_LINK_OK == apl_core_command(&self->core, &c));
 }
+static void running_key_lamps(struct apl *self)
+{
+    assert((APL_COMPILE_PURIFY && (APL_COMPILE_UV || APL_COMPILE_ANION) && APL_HMI_COMPILE_KEY_PURIFY ? 255u : 0u)
+           == apl_hmi_get_key_lamp(&self->hmi, APL_HMI_KEY_PURIFY));
+    assert((APL_COMPILE_HUMIDIFY && (APL_COMPILE_PURIFY || APL_COMPILE_SENSOR_HUMIDITY) && APL_HMI_COMPILE_KEY_HUMIDITY ? 255u : 0u)
+           == apl_hmi_get_key_lamp(&self->hmi, APL_HMI_KEY_HUMIDITY));
+    assert((APL_HMI_COMPILE_KEY_TIMER ? 255u : 0u) == apl_hmi_get_key_lamp(&self->hmi, APL_HMI_KEY_TIMER));
+}
 int main(void)
 {
     struct apl self; struct host host; char digits[APL_HMI_DIGIT_COUNT];
@@ -44,12 +52,35 @@ int main(void)
     assert((APL_COMPILE_HUMIDIFY || APL_HMI_COMPILE_KEY_FILTER ? 1u : 0u) == resets(&self));
     apl_hmi_set_child_lock(&self.hmi, APL_HMI_CHILD_LOCK_OFF);
     command(&self, APL_LINK_CMD_POWER, 0u); ticks(&self, 1u);
+    /* 运行按键背光独立于功能开关及是否有定时。 */
+    running_key_lamps(&self);
+#if APL_COMPILE_PURIFY && (APL_COMPILE_UV || APL_COMPILE_ANION)
+    command(&self, APL_LINK_CMD_PURIFY_TOGGLE, 0u); ticks(&self, 1u);
+    running_key_lamps(&self);
+    command(&self, APL_LINK_CMD_PURIFY_TOGGLE, 0u); ticks(&self, 1u);
+    running_key_lamps(&self);
+    assert(0u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_UV));
+    assert(0u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_ANION));
+#endif
+#if APL_COMPILE_PURIFY && APL_COMPILE_HUMIDIFY
+    command(&self, APL_LINK_CMD_HUMIDIFY_TOGGLE, 0u); ticks(&self, 1u);
+    running_key_lamps(&self);
+    assert(0u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_HUMIDITY));
+#endif
+    command(&self, APL_LINK_CMD_TIMER_SET, 1u); ticks(&self, 1u);
+    running_key_lamps(&self);
+    command(&self, APL_LINK_CMD_TIMER_SET, 0u); ticks(&self, 1u);
+    running_key_lamps(&self);
 #if APL_CORE_HAS_TURBO
     command(&self, APL_LINK_CMD_TURBO_TOGGLE, 0u); ticks(&self, 1u);
     assert(255u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_GEAR_1));
     assert(255u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_GEAR_2));
     assert(255u == apl_hmi_get_icon(&self.hmi, APL_HMI_ICON_GEAR_3));
 #endif
-    puts("PASS: standby filter query, per-model reset key, child lock and three Turbo indicators; physical key mapping remains external");
+    command(&self, APL_LINK_CMD_POWER, 0u); ticks(&self, 1u);
+    assert(0u == apl_hmi_get_key_lamp(&self.hmi, APL_HMI_KEY_PURIFY));
+    assert(0u == apl_hmi_get_key_lamp(&self.hmi, APL_HMI_KEY_HUMIDITY));
+    assert(0u == apl_hmi_get_key_lamp(&self.hmi, APL_HMI_KEY_TIMER));
+    puts("PASS: standby filter query, per-model reset key, child lock, running key backlights and three Turbo indicators; physical key mapping remains external");
     return 0;
 }

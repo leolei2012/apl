@@ -1,0 +1,56 @@
+{
+  "schemaId": "apl.runtime-profile",
+  "schemaVersion": 6,
+  "schemaRevision": 7,
+  "aplVersion": "0.3.0",
+  "productName": "空气净化器示例",
+  "configRevision": 1,
+  "releaseStatus": "development",
+  "profile": {
+    "version": 6,
+    "purify_enabled": 1,
+    "humidify_enabled": 0,
+    "modules": 0,
+    "sensors": 15,
+    "default_fan_gear": 1,
+    "dry_fan_gear": 1,
+    "sensor_fallback_gear": 2,
+    "turbo_enabled": 1,
+    "filter_shared": 1,
+    "humidity_hysteresis": 3,
+    "dry_s": 3600,
+    "filter_life_h": 2200,
+    "shortage_run_s": 300,
+    "water_blink_s": 300,
+    "wifi_pair_s": 180,
+    "display_rotate_s": 20,
+    "timer_step_h": 1,
+    "fan_sleep_rpm": 400,
+    "fan_gear1_rpm": 600,
+    "fan_gear2_rpm": 900,
+    "fan_gear3_rpm": 1200,
+    "fan_turbo_rpm": 1500,
+    "pid": "",
+    "key_mapping": {
+      "enabled": false,
+      "short": [
+        5,
+        10,
+        7,
+        9,
+        3,
+        1,
+        12
+      ],
+      "long": [
+        6,
+        11,
+        8,
+        0,
+        4,
+        2,
+        13
+      ]
+    }
+  }
+}

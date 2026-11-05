@@ -14,8 +14,9 @@ SdkGenerator::Files SdkGenerator::readSources(const QString &root, QString *erro
 {
     Files files;
     const QStringList paths = {"include/apl.h", "include/apl_core.h", "include/apl_hmi.h",
-        "include/apl_type.h", "src/apl.c", "src/apl_core.c", "src/apl_hmi.c",
-        "config/apl_core_config.h", "config/apl_hmi_config.h"};
+        "include/apl_type.h", "include/apl_platform.h", "include/apl_internal.h", "include/apl_wifi_internal.h",
+        "src/apl.c", "src/apl_core.c", "src/apl_hmi.c", "src/apl_wifi.c",
+        "config/apl_core_config.h", "config/apl_hmi_config.h", "config/apl_build_config.h"};
     QStringList inputs = paths;
     if (!root.isEmpty())
     {

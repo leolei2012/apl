@@ -35,12 +35,14 @@ int main(void)
     ticks(&self, 100u); s = snap(&self);
     assert((APL_DEFAULT_FAN_GEAR <= 3 ? APL_DEFAULT_FAN_GEAR : APL_CORE_SENSOR_FALLBACK_GEAR) == s.fan_output);
     assert(0u == host.pm_reads && 0u == host.rh_reads);
-    apl_hmi_get_digits_content(&self.hmi, text); assert(0 == memcmp(text, " --", 3));
+    apl_hmi_get_digits_content(&self.hmi, text);
+    assert(text[0] == text[1] && text[1] == text[2]);
+    assert(text[0] == '^' || text[0] == '-' || text[0] == '_');
 #if APL_COMPILE_HUMIDIFY
     assert(APL_SWITCH_OFF == s.pump);
 #endif
     for (i = 0u; i < 5u; i++) { host.status[i] = APL_SENSOR_VALID; }
-    ticks(&self, 100u); s = snap(&self);
+    ticks(&self, 400u); s = snap(&self);
     assert((APL_COMPILE_PURIFY ? 1u : 0u) == s.aq_ready);
     assert((APL_COMPILE_HUMIDIFY ? 2u : 0u) == s.fan_output);
     pm_reads = host.pm_reads; rh_reads = host.rh_reads;
@@ -76,7 +78,9 @@ int main(void)
     command(&self, APL_LINK_CMD_POWER, 0u);
     ticks(&self, 1u); assert(0u == snap(&self).sensors_ready);
     assert(0u == snap(&self).sensor_faults && 0u != snap(&self).sensors_warming);
-    apl_hmi_get_digits_content(&self.hmi, text); assert(0 == memcmp(text, " --", 3));
+    apl_hmi_get_digits_content(&self.hmi, text);
+    assert(text[0] == text[1] && text[1] == text[2]);
+    assert(text[0] == '^' || text[0] == '-' || text[0] == '_');
     puts("PASS: preprocessing, no reads while invalid, configurable fallback, E9, no fake humidity, recovery and sleep silence");
     return 0;
 }

@@ -18,9 +18,9 @@
 #include "apl_type.h"
 
 #define APL_HMI_VERSION_MAJOR   0
-#define APL_HMI_VERSION_MINOR   2
-#define APL_HMI_VERSION_PATCH   2
-#define APL_HMI_VERSION_STRING  "0.2.2"
+#define APL_HMI_VERSION_MINOR   3
+#define APL_HMI_VERSION_PATCH   0
+#define APL_HMI_VERSION_STRING  "0.3.0"
 #define APL_HMI_VERSION_NUM \
     ((APL_HMI_VERSION_MAJOR << 16) | (APL_HMI_VERSION_MINOR << 8) | APL_HMI_VERSION_PATCH)
 
@@ -60,15 +60,26 @@
 #define APL_HMI_SLEEP_IDLE_TICKS    (APL_HMI_SLEEP_IDLE_MS / APL_HMI_TICK_MS)
 
 
-/** 一体机湿度与 PM2.5 轮流显示的周期。原表 20 秒。 */
-#define APL_HMI_ROTATE_MS           20000u
+/** 旧宿主未提供轮换间隔时的默认值；运行时优先使用快照display_rotate_s。 */
+#define APL_HMI_ROTATE_MS           (APL_DISPLAY_ROTATE_DEFAULT_S * 1000UL)
 #define APL_HMI_ROTATE_TICKS        (APL_HMI_ROTATE_MS / APL_HMI_TICK_MS)
 
-/** 同时登记的组合键上限。具体组合尚未规定，库不预登记。 */
-#define APL_HMI_COMBO_MAX           4u
+/** APL_HMI_COMBO_MAX is configured in apl_build_config.h. */
 
 /** 使用方按这个大小持有对象。布局不对外，读写都走 getter 和 setter。 */
+#if defined(__C51__)
+/* Guarded C51 state plus 24-byte capacity margin; common slots retain IDs. */
+#define APL_HMI_OPAQUE_SIZE (160u + 63u * APL_HMI_COMPILE_KEY_CALLBACKS \
+ + 3u * APL_HMI_COMPILE_KEYMAP \
+ + 13u * APL_HMI_COMBO_MAX + 8u * APL_HMI_COMPILE_AMBIENT + 8u * APL_HMI_COMPILE_BUZZER \
+ + 3u * APL_COMPILE_TIMER + 7u * APL_COMPILE_FILTER + APL_COMPILE_SLEEP \
+ + 7u * APL_COMPILE_HUMIDIFY + (APL_HMI_COMPILE_BUZZER || APL_COMPILE_HUMIDIFY) \
+ + 4u * (APL_COMPILE_SENSOR_PM25 && APL_COMPILE_SENSOR_HUMIDITY) \
+ + 2u * APL_COMPILE_HAS_SENSORS \
+ + 4u * (APL_COMPILE_TIMER || APL_COMPILE_HUMIDIFY || APL_COMPILE_WIFI))
+#else
 #define APL_HMI_OPAQUE_SIZE         1024u
+#endif
 
 struct apl_hmi;
 
@@ -160,6 +171,10 @@ struct apl_hmi_ops
     void (*set_buzzer)(uint8_t on, void *ctx) APL_CALL;  /**< 1 响，0 停。空则不发声 */
     /** 已通过功能启用、童锁检查的单键手势通知；只观察，不执行控制。ops 应清零初始化。 */
     void (*key_event)(enum apl_hmi_key_id key, uint8_t is_long, void *ctx) APL_CALL;
+    /** RGB实际输出：通道0～255，已合并氛围灯亮度，(0,0,0)为灭灯。
+     * 每拍末尾变化时调用，第一拍也同步；初始化不调用。NULL表示宿主自行轮询。
+     * 回调须快速返回，不可重入APL；ops整表清零后赋值。 */
+    void (*set_ambient_rgb)(uint8_t red, uint8_t green, uint8_t blue, void *ctx) APL_CALL;
 };
 
 
@@ -188,6 +203,16 @@ struct apl_hmi
  * 数字为 888。APL_HMI_POWERUP_LAMP_TICKS 拍之后这些灯熄灭，电源键半亮。
  */
 void apl_hmi_init(struct apl_hmi *self, const struct apl_hmi_ops *ops, void *ctx) APL_CALL;
+
+#if APL_HMI_COMPILE_KEYMAP
+/**
+ * 标准联动面板的内部手势映射，不改变宿主输入槽位或独立按键回调。
+ * 只借用指针，不复制；表须在对象使用期间持续有效且不可被并发修改。
+ * 仅在初始化后、停止 tick 时配置。NULL 或 enabled=0 使用原标准映射。
+ * 原始 key_event 和组合键仍使用 apl_hmi_key_id 的输入槽位。
+ */
+void apl_hmi_set_keymap(struct apl_hmi *self, const struct apl_keymap *keymap) APL_CALL;
+#endif
 
 /**
  * @brief 推进一拍，认出短按、长按和组合键
@@ -237,25 +262,31 @@ uint8_t apl_hmi_get_key_lamp(const struct apl_hmi *self, enum apl_hmi_key_id key
  *
  * 一次调用同时替换这三项。不提供取出函数指针的 getter。
  */
+#if APL_HMI_COMPILE_KEY_CALLBACKS
 void apl_hmi_set_key_callback(struct apl_hmi *self,
                               enum apl_hmi_key_id key,
                               void (*on_short)(struct apl_hmi *self, void *ctx) APL_CALL,
                               void (*on_long)(struct apl_hmi *self, void *ctx) APL_CALL,
                               void *ctx) APL_CALL;
+#endif
 
 /**
  * @brief 写入氛围灯亮度
  * @param self 人机对象
  * @param brightness 亮度。0 为灭。取值范围尚未规定，库不夹取值
  */
+#if APL_HMI_COMPILE_AMBIENT
 void apl_hmi_set_ambient_brightness(struct apl_hmi *self, uint8_t brightness) APL_CALL;
+#endif
 
 /**
  * @brief 读取氛围灯亮度
  * @param self 人机对象
  * @return 亮度。self 为空时返回 0
  */
+#if APL_HMI_COMPILE_AMBIENT
 uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self) APL_CALL;
+#endif
 
 /**
  * @brief 写入氛围灯颜色
@@ -266,10 +297,12 @@ uint8_t apl_hmi_get_ambient_brightness(const struct apl_hmi *self) APL_CALL;
  *
  * 改颜色不改变亮度。
  */
+#if APL_HMI_COMPILE_AMBIENT
 void apl_hmi_set_ambient_color(struct apl_hmi *self,
                                uint8_t red,
                                uint8_t green,
                                uint8_t blue) APL_CALL;
+#endif
 
 /**
  * @brief 读取氛围灯颜色
@@ -278,10 +311,12 @@ void apl_hmi_set_ambient_color(struct apl_hmi *self,
  * @param green 绿。可以为空
  * @param blue 蓝。可以为空
  */
+#if APL_HMI_COMPILE_AMBIENT
 void apl_hmi_get_ambient_color(const struct apl_hmi *self,
                                uint8_t *red,
                                uint8_t *green,
                                uint8_t *blue) APL_CALL;
+#endif
 
 /**
  * @brief 写入一段水位灯的亮度
@@ -320,6 +355,11 @@ uint8_t apl_hmi_get_digits_brightness(const struct apl_hmi *self) APL_CALL;
  */
 void apl_hmi_set_digits_content(struct apl_hmi *self,
                                 const char content[APL_HMI_DIGIT_COUNT]) APL_CALL;
+
+/** Standard seven-segment bits: A(top)=bit0, B=bit1, C=bit2, D(bottom)=bit3,
+ * E=bit4, F=bit5, G(middle)=bit6. Brightness is read separately.
+ * '^'/'-'/'_' in content represent top/middle/bottom bars. Invalid index/self -> 0. */
+uint8_t apl_hmi_get_digit_segments(const struct apl_hmi *self, uint8_t index) APL_CALL;
 
 /**
  * @brief 读取数码管三位内容
@@ -407,12 +447,14 @@ uint8_t apl_hmi_get_humidify_enabled(const struct apl_hmi *self) APL_CALL;
  * 这次按下到此结束，松开不再补短按或长按。提前松开则取消这次组合：
  * 松开的键按自己已按下的时间补短按或长按，仍按住的键继续单键计时。
  */
+#if APL_HMI_COMBO_MAX > 0
 int apl_hmi_set_combo(struct apl_hmi *self,
                       const enum apl_hmi_key_id *keys,
                       uint8_t key_count,
                       uint16_t hold_ms,
                       void (*on_combo)(struct apl_hmi *self, void *ctx) APL_CALL,
                       void *ctx) APL_CALL;
+#endif
 
 
 /**
@@ -454,14 +496,18 @@ enum apl_hmi_water_color apl_hmi_get_water_color(const struct apl_hmi *self) APL
  *
  * 由 apl_hmi_tick 推进，经 ops 的 set_buzzer 开关蜂鸣器。新的一段打断旧的。
  */
+#if APL_HMI_COMPILE_BUZZER
 void apl_hmi_buzzer_play(struct apl_hmi *self, uint8_t count, uint16_t on_ms, uint16_t off_ms) APL_CALL;
+#endif
 
 /**
  * @brief 提示音是否还在播放
  * @param self 人机对象
  * @return 1 在播放。self 为空时返回 0
  */
+#if APL_HMI_COMPILE_BUZZER
 uint8_t apl_hmi_get_buzzer_busy(const struct apl_hmi *self) APL_CALL;
+#endif
 
 /**
  * @brief 接上面板逻辑：按键形成 link_command，显示按 link_snapshot 绘制
@@ -494,7 +540,9 @@ void apl_hmi_set_snapshot(struct apl_hmi *self, const struct apl_link_snapshot *
  *
  * 只查询，不改主控状态。当前面板没有单独的滤芯寿命键，由使用方决定入口。
  */
+#if APL_COMPILE_FILTER
 void apl_hmi_filter_query(struct apl_hmi *self) APL_CALL;
+#endif
 
 /**
  * @brief 面板灯光是否开着

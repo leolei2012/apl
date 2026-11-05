@@ -1,14 +1,18 @@
 # APL
 
-后续产品配置、业务仿真与 SDK 交付统一在 [Web APL Studio](apl_studio/README.md) 推进；`simulator/` 内的旧 Qt 工具保留作历史参考，不再继续功能开发。C 业务核心继续作为 SDK 和 Web 真实仿真的共同基础。
+新方向是固定全功能固件，由 [Web APL Studio](apl_studio/README.md) 生成产品参数，再导入设备。APL 开发版 0.3.0 已提供运行时方案的校验、冷启动加载和读回，见 [运行时参数配置](docs/规格/APL运行时参数配置.md)。导入协议待定；当前 Web 的 SDK 交付和冻结模板仍按既有流程运行，尚未改为参数下发。`simulator/` 内旧 Qt 工具保留作历史参考。
 
 空气净化与加湿库。库内不创建实例，使用方持有一份 `struct apl`。
+
+宿主接入从 [APL使用说明](apl_lib/使用说明.md) 开始：未导入参数表时使用固件缺省配置，包含各档风机目标转速；文档统一维护编译、启动、参数加载、转速读取和掉电记忆的使用步骤。
+
+移植工程需提供的周期调度、硬件回调、RGB输出和存储条件见 [宿主接入要求](apl_lib/宿主接入要求.md)。
 
 库源码集中在 [`apl_lib/`](apl_lib/README.md)：`src/`、`include/`、`config/`保留原有内部结构。测试仍在工程根`tests/`，冻结模板和导出SDK继续使用各自包内的相对目录。
 
 | 文件 | 职责 |
 |---|---|
-| [apl_lib/include/apl.h](./apl_lib/include/apl.h)、[apl_lib/src/apl.c](./apl_lib/src/apl.c) | 组合对象。初始化主控和人机，每 10 ms 先主控、后人机推进一拍 |
+| [apl_lib/include/apl.h](./apl_lib/include/apl.h)、[apl_lib/src/apl.c](./apl_lib/src/apl.c) | 组合对象。推荐每 1ms 调用 `apl_tick_1ms`，内部每 10ms 先主控、后人机推进一个业务帧 |
 | [apl_lib/include/apl_type.h](./apl_lib/include/apl_type.h) | 整机状态、开关、风机档位、水位段数。主控和人机共用，两边不互相包含 |
 | [apl_lib/include/apl_core.h](./apl_lib/include/apl_core.h)、[apl_lib/src/apl_core.c](./apl_lib/src/apl_core.c) | 业务判断、动态配置、执行器输出、状态快照 |
 | [apl_lib/include/apl_hmi.h](./apl_lib/include/apl_hmi.h)、[apl_lib/src/apl_hmi.c](./apl_lib/src/apl_hmi.c) | 按键与显示。面板在编译期选定 |
@@ -16,6 +20,10 @@
 主控和人机互不包含。`apl.c` 把它们放在同一个对象里。人机交出 `link_command`，主控写入 `link_snapshot`。净化与加湿是否启用写在 `apl_core` 的动态配置里；没编译进程序的功能不能被打开。
 
 ## 配置
+
+运行时产品参数的 Excel 模板、机器可读字段定义和三机型示例位于 [apl_lib/parameters](apl_lib/parameters/README.md)，与 APL 源码一起管理版本。未来 Studio 按所选 APL Git 版本读取相应参数定义。
+
+当前参数格式v6、定义修订7增加[内部按键映射](apl_lib/按键映射.md)：Studio分别配置短按、长按，APL按动作执行，宿主GPIO和输入编号不变。未配置时保留标准行为；事件和组合键仍使用原始输入。配置随产品保存、仿真及导出，可通过编译开关裁掉自定义映射。
 
 | 文件 | 用途 |
 |---|---|
@@ -41,7 +49,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| [apl_lib/include/apl.h](./apl_lib/include/apl.h) | `apl_init` 初始化两边，`apl_tick` 每 10 ms 先调用 `apl_core_tick`，再调用 `apl_hmi_tick` |
+| [apl_lib/include/apl.h](./apl_lib/include/apl.h) | `apl_init` 初始化两边，`apl_tick_1ms` 为 1ms 调度入口；旧 `apl_tick` 保留 10ms 语义，同一实例不可混调 |
 | [apl_lib/include/apl_type.h](./apl_lib/include/apl_type.h) | 主控和人机共用的枚举，以及 `struct apl_link_command`、`struct apl_link_snapshot`、`struct apl_core_memory` |
 | [apl_lib/include/apl_core.h](./apl_lib/include/apl_core.h) | 运行四态、风干、定时、风机与自动/恒湿、净化与 UV 联锁、加湿与缺水、滤网、Wi-Fi、产测、掉电记忆；`apl_core_command`、`apl_core_get_snapshot` |
 | [apl_lib/include/apl_hmi.h](./apl_lib/include/apl_hmi.h) | 六键短按/长按、童锁、组合键、键灯、状态图标、水位灯与颜色、氛围灯、数码管、蜂鸣器；接上 link 后的面板逻辑。上电全灯 2 秒后熄灭，电源键半亮 |

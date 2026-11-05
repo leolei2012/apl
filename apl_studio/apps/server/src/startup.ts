@@ -37,6 +37,7 @@ export async function startStudio(options: StudioOptions = {}) {
     await ctx.plugin(product, { dbPath: resolve(data, 'studio.db') })
     await ctx.plugin(templates)
     ctx.templates.loadDirectory(catalog)
+    ctx.templates.register(new templates.RuntimeProfileProvider(resolve(STUDIO_ROOT, '..')))
     await ctx.plugin(build, { directory: resolve(data, 'sdk') })
     await ctx.plugin(api, { host: STUDIO_HOST, port, staticDir: resolve(STUDIO_ROOT, 'apps/web/dist') })
     const url = await ctx.api.listen({ host: STUDIO_HOST, port })

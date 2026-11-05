@@ -11,6 +11,38 @@
 
 #include "apl_platform.h"
 
+/** Internal panel actions. Host key input IDs remain unchanged. */
+enum apl_key_action
+{
+    APL_KEY_ACTION_NONE = 0,
+    APL_KEY_ACTION_POWER,
+    APL_KEY_ACTION_DRY_STOP,
+    APL_KEY_ACTION_FAN_CYCLE,
+    APL_KEY_ACTION_TURBO_TOGGLE,
+    APL_KEY_ACTION_PURIFY_TOGGLE,
+    APL_KEY_ACTION_WIFI_PAIR,
+    APL_KEY_ACTION_TIMER_EDIT,
+    APL_KEY_ACTION_CHILD_LOCK_TOGGLE,
+    APL_KEY_ACTION_LIGHT_TOGGLE,
+    APL_KEY_ACTION_HUMIDITY_CYCLE,
+    APL_KEY_ACTION_HUMIDITY_EDIT,
+    APL_KEY_ACTION_FILTER_QUERY,
+    APL_KEY_ACTION_FILTER_RESET_QUERY,
+    APL_KEY_ACTION_SLEEP_TOGGLE,
+    APL_KEY_ACTION_HUMIDIFY_TOGGLE,
+    APL_KEY_ACTION_COUNT
+};
+#define APL_KEYMAP_COUNT 7u
+/** Slot order: Purify, Humidity, Timer, Light, Speed, Power, Filter.
+ * enabled=0 retains the standard panel policy; enabled=1 uses both arrays.
+ * Store action IDs as bytes, never compiler-dependent enum representations. */
+struct apl_keymap
+{
+    uint8_t enabled;
+    uint8_t short_action[APL_KEYMAP_COUNT];
+    uint8_t long_action[APL_KEYMAP_COUNT];
+};
+
 /** 整机状态。同一时刻只有一个。 */
 enum apl_power
 {
@@ -177,6 +209,10 @@ struct apl_link_command
  * 主控发给人机的状态快照。人机只按这一份绘制。
  * 未编译或未启用的功能，对应字段为 0，人机不画。
  */
+/** Default duration of each PM2.5/humidity display page. */
+#define APL_DISPLAY_ROTATE_DEFAULT_S 20u
+#define APL_TIMER_STEP_DEFAULT_H 1u
+
 struct apl_link_snapshot
 {
     enum apl_run_state run_state;
@@ -218,6 +254,9 @@ struct apl_link_snapshot
     uint8_t sensors_warming;
     uint8_t sensor_faults;
     uint8_t aq_ready;                  /**< 空气质量闭环所用输入均有效且至少有一项。 */
+    uint16_t display_rotate_s;         /**< 每页显示秒数；0兼容旧宿主，使用默认20秒。 */
+    uint8_t timer_step_h;              /**< 定时键步进小时数；0兼容旧宿主，使用默认1小时。 */
+    uint16_t fan_target_rpm;           /**< APL风机目标转速，非实测值；关闭时0。 */
 };
 
 /**

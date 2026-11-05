@@ -1,0 +1,442 @@
+{
+  "schemaId": "apl.runtime-profile",
+  "schemaVersion": 6,
+  "schemaRevision": 7,
+  "aplVersion": "0.3.0",
+  "releaseStatus": "development",
+  "source": {
+    "repository": "https://github.com/leolei2012/apl.git",
+    "libraryPath": "apl_lib",
+    "header": "include/apl_core.h",
+    "struct": "apl_profile",
+    "tag": null,
+    "commit": null
+  },
+  "transport": {
+    "candidate": "modbus-rtu",
+    "registerMapStatus": "unassigned"
+  },
+  "parameters": [
+    {
+      "key": "version",
+      "name": "参数格式版本",
+      "cType": "uint16_t",
+      "default": 6,
+      "min": 6,
+      "max": 6,
+      "unit": "",
+      "group": "格式",
+      "description": "由APL定义，不能自行修改"
+    },
+    {
+      "key": "purify_enabled",
+      "name": "启用净化",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "unit": "",
+      "group": "功能",
+      "description": "至少启用净化或加湿之一"
+    },
+    {
+      "key": "humidify_enabled",
+      "name": "启用加湿",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "unit": "",
+      "group": "功能",
+      "description": "至少启用净化或加湿之一"
+    },
+    {
+      "key": "modules",
+      "name": "模块选配",
+      "cType": "uint8_t",
+      "default": 7,
+      "min": 0,
+      "max": 7,
+      "unit": "位掩码",
+      "group": "功能",
+      "description": "UV=1、负离子=2、Wi-Fi=4；相加组合，0为均关闭"
+    },
+    {
+      "key": "sensors",
+      "name": "传感器选配",
+      "cType": "uint8_t",
+      "default": 31,
+      "min": 0,
+      "max": 31,
+      "unit": "位掩码",
+      "group": "功能",
+      "description": "空气传感器依赖净化；湿度传感器依赖加湿；见选项说明"
+    },
+    {
+      "key": "default_fan_gear",
+      "name": "开机风档",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 4,
+      "unit": "档",
+      "group": "风机",
+      "description": "0睡眠、1一档、2二档、3三档、4自动"
+    },
+    {
+      "key": "dry_fan_gear",
+      "name": "风干风档",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 3,
+      "unit": "档",
+      "group": "风机",
+      "description": "0睡眠、1一档、2二档、3三档；睡眠缺水风干沿用睡眠档"
+    },
+    {
+      "key": "sensor_fallback_gear",
+      "name": "传感器异常备用风档",
+      "cType": "uint8_t",
+      "default": 2,
+      "min": 0,
+      "max": 3,
+      "unit": "档",
+      "group": "风机",
+      "description": "输入无效时使用的实际风档"
+    },
+    {
+      "key": "turbo_enabled",
+      "name": "启用极速",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "unit": "",
+      "group": "功能",
+      "description": "0关闭、1允许进入极速"
+    },
+    {
+      "key": "filter_shared",
+      "name": "滤网共用重置",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "unit": "",
+      "group": "维护",
+      "description": "一体机：1两套滤网一起重置，0沿用独立重置规则"
+    },
+    {
+      "key": "humidity_hysteresis",
+      "name": "恒湿回差",
+      "cType": "uint8_t",
+      "default": 3,
+      "min": 0,
+      "max": 100,
+      "unit": "百分点",
+      "group": "加湿",
+      "description": "达到目标停泵；低于目标减回差后允许重新开泵"
+    },
+    {
+      "key": "dry_s",
+      "name": "风干时间",
+      "cType": "uint32_t",
+      "default": 3600,
+      "min": 0,
+      "max": 86400,
+      "unit": "秒",
+      "group": "加湿",
+      "description": "0在进入风干后的下一秒检查结束，不是立即待机"
+    },
+    {
+      "key": "filter_life_h",
+      "name": "滤网寿命",
+      "cType": "uint32_t",
+      "default": 2200,
+      "min": 1,
+      "max": 1000000,
+      "unit": "小时",
+      "group": "维护",
+      "description": "实际运行累计；配置与已用寿命分开保存"
+    },
+    {
+      "key": "shortage_run_s",
+      "name": "缺水恢复窗口",
+      "cType": "uint32_t",
+      "default": 300,
+      "min": 0,
+      "max": 86400,
+      "unit": "秒",
+      "group": "加湿",
+      "description": "纯加湿缺水超时后风干；一体机继续净化"
+    },
+    {
+      "key": "water_blink_s",
+      "name": "缺水灯闪烁时间",
+      "cType": "uint32_t",
+      "default": 300,
+      "min": 0,
+      "max": 86400,
+      "unit": "秒",
+      "group": "显示",
+      "description": "适用缺水闪烁状态，结束后常亮"
+    },
+    {
+      "key": "wifi_pair_s",
+      "name": "配网超时",
+      "cType": "uint32_t",
+      "default": 180,
+      "min": 1,
+      "max": 86400,
+      "unit": "秒",
+      "group": "联网",
+      "description": "选配Wi-Fi后使用"
+    },
+    {
+      "key": "display_rotate_s",
+      "name": "传感器显示切换间隔",
+      "cType": "uint16_t",
+      "default": 20,
+      "min": 1,
+      "max": 3600,
+      "unit": "秒",
+      "group": "显示",
+      "description": "净化+加湿时每页停留时长；从开机计时，含5秒预处理"
+    },
+    {
+      "key": "timer_step_h",
+      "name": "定时按键步进",
+      "cType": "uint8_t",
+      "default": 1,
+      "min": 1,
+      "max": 24,
+      "unit": "小时",
+      "group": "定时",
+      "description": "首次无定时从步进值起；后续累加，超过24回0取消；连增同步"
+    },
+    {
+      "key": "fan_sleep_rpm",
+      "name": "睡眠档目标转速",
+      "cType": "uint16_t",
+      "default": 400,
+      "min": 0,
+      "max": 65535,
+      "unit": "rpm",
+      "group": "风机转速",
+      "description": "通用目标转速，可按产品覆盖；非实测值，0表示停转"
+    },
+    {
+      "key": "fan_gear1_rpm",
+      "name": "一档目标转速",
+      "cType": "uint16_t",
+      "default": 600,
+      "min": 0,
+      "max": 65535,
+      "unit": "rpm",
+      "group": "风机转速",
+      "description": "通用目标转速，可按产品覆盖；非实测值，0表示停转"
+    },
+    {
+      "key": "fan_gear2_rpm",
+      "name": "二档目标转速",
+      "cType": "uint16_t",
+      "default": 900,
+      "min": 0,
+      "max": 65535,
+      "unit": "rpm",
+      "group": "风机转速",
+      "description": "通用目标转速，可按产品覆盖；非实测值，0表示停转"
+    },
+    {
+      "key": "fan_gear3_rpm",
+      "name": "三档目标转速",
+      "cType": "uint16_t",
+      "default": 1200,
+      "min": 0,
+      "max": 65535,
+      "unit": "rpm",
+      "group": "风机转速",
+      "description": "通用目标转速，可按产品覆盖；非实测值，0表示停转"
+    },
+    {
+      "key": "fan_turbo_rpm",
+      "name": "极速档目标转速",
+      "cType": "uint16_t",
+      "default": 1500,
+      "min": 0,
+      "max": 65535,
+      "unit": "rpm",
+      "group": "风机转速",
+      "description": "通用目标转速，可按产品覆盖；非实测值，0表示停转"
+    }
+  ],
+  "identity": {
+    "pid": {
+      "default": "",
+      "maxLength": 16,
+      "pattern": "^[A-Za-z0-9]*$",
+      "description": "产品ID；0～16位ASCII字母或数字，保留大小写，空表示尚未配置；独立于Studio内部产品UUID和工程code"
+    }
+  },
+  "keyMapping": {
+    "parameter": "key_mapping",
+    "description": "只配置APL内部动作；宿主输入编号和组合键物理输入保持不变。缺失或enabled=false使用标准行为。",
+    "default": {
+      "enabled": false,
+      "short": [
+        5,
+        10,
+        7,
+        9,
+        3,
+        1,
+        12
+      ],
+      "long": [
+        6,
+        11,
+        8,
+        0,
+        4,
+        2,
+        13
+      ]
+    },
+    "slots": [
+      {
+        "id": 0,
+        "key": "purify",
+        "name": "Purify"
+      },
+      {
+        "id": 1,
+        "key": "humidity",
+        "name": "Humidity"
+      },
+      {
+        "id": 2,
+        "key": "timer",
+        "name": "Timer"
+      },
+      {
+        "id": 3,
+        "key": "light",
+        "name": "Light"
+      },
+      {
+        "id": 4,
+        "key": "speed",
+        "name": "Speed"
+      },
+      {
+        "id": 5,
+        "key": "power",
+        "name": "Power"
+      },
+      {
+        "id": 6,
+        "key": "filter",
+        "name": "Filter"
+      }
+    ],
+    "actions": [
+      {
+        "id": 0,
+        "key": "NONE",
+        "name": "无动作",
+        "description": "不执行业务动作，不唤醒屏幕"
+      },
+      {
+        "id": 1,
+        "key": "POWER",
+        "name": "电源开关",
+        "description": "运行与待机切换；产测中退出并恢复出厂设置"
+      },
+      {
+        "id": 2,
+        "key": "DRY_STOP",
+        "name": "停止风干",
+        "description": "风干中立即结束风干"
+      },
+      {
+        "id": 3,
+        "key": "FAN_CYCLE",
+        "name": "风速循环",
+        "description": "按已启用档位循环选择风速"
+      },
+      {
+        "id": 4,
+        "key": "TURBO_TOGGLE",
+        "name": "极速开关",
+        "description": "进入或退出极速"
+      },
+      {
+        "id": 5,
+        "key": "PURIFY_TOGGLE",
+        "name": "净化开关",
+        "description": "切换UV、负离子等净化复合功能"
+      },
+      {
+        "id": 6,
+        "key": "WIFI_PAIR",
+        "name": "Wi-Fi配网",
+        "description": "清除网络并进入配网"
+      },
+      {
+        "id": 7,
+        "key": "TIMER_EDIT",
+        "name": "定时设置",
+        "description": "进入或递增定时设置，长时间保持输入可连增"
+      },
+      {
+        "id": 8,
+        "key": "CHILD_LOCK_TOGGLE",
+        "name": "童锁开关",
+        "description": "启用或解除童锁，锁定时也可执行"
+      },
+      {
+        "id": 9,
+        "key": "LIGHT_TOGGLE",
+        "name": "灯光开关",
+        "description": "切换整块面板显示灯光"
+      },
+      {
+        "id": 10,
+        "key": "HUMIDITY_CYCLE",
+        "name": "湿度键标准动作",
+        "description": "一体机切换加湿；纯加湿机进入或递增恒湿设置"
+      },
+      {
+        "id": 11,
+        "key": "HUMIDITY_EDIT",
+        "name": "恒湿设置",
+        "description": "一体机进入或递增恒湿设置；纯加湿机保持标准长按行为"
+      },
+      {
+        "id": 12,
+        "key": "FILTER_QUERY",
+        "name": "滤网查询",
+        "description": "纯净化机查询滤芯寿命"
+      },
+      {
+        "id": 13,
+        "key": "FILTER_RESET_QUERY",
+        "name": "滤网重置并查询",
+        "description": "纯净化机重置滤芯寿命并显示结果"
+      },
+      {
+        "id": 14,
+        "key": "SLEEP_TOGGLE",
+        "name": "睡眠开关",
+        "description": "显式进入或退出睡眠"
+      },
+      {
+        "id": 15,
+        "key": "HUMIDIFY_TOGGLE",
+        "name": "加湿开关",
+        "description": "显式切换加湿功能"
+      }
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 # APL 后端规格书
 
+最新确认：每次开机后PM2.5/湿度最短预处理5秒，到时仍需输入有效才进入闭环。自检恢复、计时边界及显示契约见[上电自检与传感器预处理](上电自检与传感器预处理.md)。
+
 | 项目     | 内容                                                                      |
 | -------- | ------------------------------------------------------------------------- |
 | 文档状态 | 草稿                                                                      |
@@ -100,7 +102,7 @@ void apl_core_init(struct apl_core *self, const struct apl_core_ops *ops, void *
 
 ### 3.2 link_command 与 link_snapshot
 
-人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每拍可用 `apl_core_get_snapshot` 取一份 `struct apl_link_snapshot`。`apl_lib/src/apl.c` 在 `apl_tick` 里先推进主控，再把快照交给人机。
+人机经 `apl_core_command` 交来一条 `struct apl_link_command`，主控返回 `APL_LINK_OK` 或 `APL_LINK_REJECTED`。被拒绝时状态不变。主控每个业务帧可用 `apl_core_get_snapshot` 取一份 `struct apl_link_snapshot`。推荐每 1ms 调用 `apl_tick_1ms`，每个实例累计 10 次后执行 `apl_tick` 中的完整 10ms 业务帧：先推进主控，再把快照交给人机。
 
 `struct apl_link_command` 只有两项：`type`（`enum apl_link_command_type`）和 `arg`（`uint8_t`，不用时为 0）。
 
@@ -252,9 +254,9 @@ uint32_t apl_core_get_timer(struct apl_core *self);
 
 `apl_core_power_on` 开机。`apl_core_power_off` 关机。`apl_core_get_power` 读取整机状态。`apl_core_set_timer` 设置定时，`seconds` 的单位是秒，`on_timer` 到时调用，并传入 `self` 和 `ctx`。定时开机时，回调里调用 `apl_core_power_on`。定时关机时，回调里调用 `apl_core_power_off`。`on_timer` 为空则到时不调用。再次调用按新的秒数和回调重新设定。`apl_core_get_timer` 返回剩余的计时秒数；没有定时时返回 `0`。面板按小时设置走 `APL_LINK_CMD_TIMER_SET`，1 小时等于 3600 秒，0 取消。传入 `0` 表示没有定时，到时回调不触发。
 
-使用方每 10 ms 调用一次 `apl_tick`，其中先调用 `apl_core_tick`。剩余秒数每 100 拍减 1。关机期间定时也走，到时回调里可以开机。
+使用方推荐每 `APL_TICK_MS`（1ms）调用一次 `apl_tick_1ms`。内部每 10 次调用执行一个 10ms 业务帧，其中先调用 `apl_core_tick`；剩余秒数每 100 个业务帧（1000 次 1ms 调用）减 1。关机期间宿主定时也走，到时回调里可以开机。
 
-使用方每 10 ms 调用一次 `apl_tick`，其中先调用 `apl_core_tick`。剩余秒数每 100 拍减 1。关机期间宿主定时也走，到时回调里可以开机。
+旧 `apl_tick` 和独立主控的 `apl_core_tick` 保留每 10ms 调用的约定；同一实例不可混用新旧入口或重复推进内部对象。成功初始化清零各实例自己的分频计数，前 9 次 1ms 调用不执行业务；调度和其他 API 在同一前台上下文串行执行。完整宿主要求见[宿主接入要求](../../apl_lib/宿主接入要求.md)。
 
 ### 5.2 风机
 
@@ -283,6 +285,8 @@ enum apl_fan_gear apl_core_get_fan_gear(const struct apl_core *self);
 5. 其余按用户档位。
 
 初始档位为 `APL_DEFAULT_FAN_GEAR`。关机不改档位（极速除外，关机退出极速）。
+
+运行时参数v4新增睡眠、一、二、三、极速五档目标rpm，通用缺省依次为400/600/900/1200/1500，可通过运行时参数覆盖。`apl_core_get_fan_target_rpm`将已提交的最终输出档位映射为目标转速；自动、恒湿、风干和备用档均先按上述策略选档，风机关闭时返回0。宿主在tick后轮询此getter，或在旧 `set_fan` 变化回调中读取；快照 `fan_target_rpm` 与getter一致。它不是实测转速，PWM、测速和电机闭环属于宿主驱动。具体字段与接入见[运行时参数配置](APL运行时参数配置.md)。
 
 ### 5.3 空气净化
 

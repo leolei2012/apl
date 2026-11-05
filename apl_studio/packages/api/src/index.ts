@@ -6,9 +6,9 @@ import staticFiles from '@fastify/static'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseDefinition, validateDefinition, interfaceHeader, STUDIO_VERSION, ValidationError } from '@apl-studio/model'
-import { definitionPackage } from '@apl-studio/definition'
+import { profileWorkbook, firmwarePackage, memoryEstimateReport, definitionPackage } from '@apl-studio/definition'
 import { problem, type ProductStore } from '@apl-studio/product'
-import type { TemplateRegistry } from '@apl-studio/templates'
+import { RuntimeProfileProvider, type TemplateRegistry } from '@apl-studio/templates'
 import type { SdkBuildService, SimulationService, AcceptanceService } from '@apl-studio/build'
 import type { SimulationAction } from '@apl-studio/model/simulation'
 import { applyTemplate } from '@apl-studio/model/template'
@@ -70,7 +70,42 @@ export function createApi(products: ProductStore, templates: TemplateRegistry, s
     const pack = definitionPackage(products.get(request.params.id))
     return reply.header('Content-Disposition', `attachment; filename="${pack.filename}"`).header('X-Definition-Fingerprint', pack.fingerprint).type('application/zip').send(Buffer.from(pack.bytes))
   })
+  app.get('/api/profile/catalog', async () => {
+    const runtime = templates.list().find(t => t.id === 'apl.runtime-profile')
+    const provider = runtime && templates.get(runtime.id, runtime.version)
+    if (!(provider instanceof RuntimeProfileProvider)) throw problem(409, '当前服务尚未加载运行时参数版本，请重启新版 Studio', 'PROFILE_UNAVAILABLE')
+    return provider.catalog
+  })
+  app.get<{ Params: { id: string }; Querystring: { revision: string } }>('/api/products/:id/parameters.xlsx', async (request, reply) => {
+    const product = products.get(request.params.id), reference = product.definition.template
+    if (Number(request.query.revision) !== product.revision) throw problem(409, '配置已更新，请刷新后导出', 'REVISION_CONFLICT')
+    const provider = reference && templates.get(reference.id, reference.version)
+    if (!(provider instanceof RuntimeProfileProvider)) throw problem(409, '请选择支持运行时参数的 APL 版本', 'PROFILE_UNAVAILABLE')
+    const issues = provider.validate(product.definition)
+    if (issues.length) throw new ValidationError(issues.map(message => ({ path: 'profile', message })))
+    return reply.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').header('Content-Disposition', `attachment; filename="${product.definition.code}-r${product.revision}.xlsx"`).send(Buffer.from(profileWorkbook(provider.workbook, product, provider.catalog)))
+  })
   app.get('/api/templates', async () => ({ templates: templates.list(), status: templates.list().length ? 'ready' : 'awaiting-source-template' }))
+  app.get<{ Params: { id: string }; Querystring: { revision: string } }>('/api/products/:id/memory-estimate.json', async (request, reply) => {
+    const product = products.get(request.params.id), reference = product.definition.template
+    if (Number(request.query.revision) !== product.revision) throw problem(409, '配置已更新，请刷新后导出', 'REVISION_CONFLICT')
+    const provider = reference && templates.get(reference.id, reference.version)
+    if (!(provider instanceof RuntimeProfileProvider)) throw problem(409, '请选择支持运行时参数的 APL 版本', 'PROFILE_UNAVAILABLE')
+    const issues = provider.validate(product.definition)
+    if (issues.length) throw new ValidationError(issues.map(message => ({ path: 'memory', message })))
+    return reply.type('application/json; charset=utf-8').header('Content-Disposition', `attachment; filename="${product.definition.code}-memory-r${product.revision}.json"`)
+      .send(JSON.stringify(memoryEstimateReport(product, provider.catalog.source.fingerprint), null, 2) + '\n')
+  })
+  app.get<{ Params: { id: string }; Querystring: { revision: string } }>('/api/products/:id/firmware.zip', async (request, reply) => {
+    const product = products.get(request.params.id), reference = product.definition.template
+    if (Number(request.query.revision) !== product.revision) throw problem(409, '配置已更新，请刷新后导出', 'REVISION_CONFLICT')
+    const provider = reference && templates.get(reference.id, reference.version)
+    if (!(provider instanceof RuntimeProfileProvider)) throw problem(409, '请选择支持运行时参数的 APL 版本', 'PROFILE_UNAVAILABLE')
+    const issues = provider.validate(product.definition)
+    if (issues.length) throw new ValidationError(issues.map(message => ({ path: 'firmware', message })))
+    const pack = firmwarePackage(product, provider.firmwareFiles(product.definition), provider.catalog.source.fingerprint)
+    return reply.type('application/zip').header('Content-Disposition', `attachment; filename="${pack.filename}"`).send(Buffer.from(pack.bytes))
+  })
   app.get<{ Params: { id: string } }>('/api/products/:id/acceptance', async request => {
     if (!acceptances) throw problem(409, '场景验收服务尚未接入', 'ACCEPTANCE_UNAVAILABLE')
     return acceptances.latest(products.get(request.params.id))

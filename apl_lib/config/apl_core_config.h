@@ -6,6 +6,8 @@
 #ifndef APL_CORE_CONFIG_H
 #define APL_CORE_CONFIG_H
 
+#include "apl_build_config.h"
+
 /*
  * 编译控制：决定对应代码是否进入程序。未编译的功能，动态配置不能打开。
  * 默认值：尚无动态配置时的初始值。已有动态配置时，以动态配置为准。
@@ -69,6 +71,31 @@
 /** 首次开机的风机档位，取 enum apl_fan_gear 的值。1 = 一档（待确认：汇总表写二档） */
 #ifndef APL_DEFAULT_FAN_GEAR
 #define APL_DEFAULT_FAN_GEAR            1u
+#endif
+
+/** 各档目标rpm通用起始值；项目可用-D覆盖，导入参数表优先。0表示停转。 */
+#ifndef APL_DEFAULT_FAN_SLEEP_RPM
+#define APL_DEFAULT_FAN_SLEEP_RPM       400u
+#endif
+#ifndef APL_DEFAULT_FAN_GEAR1_RPM
+#define APL_DEFAULT_FAN_GEAR1_RPM       600u
+#endif
+#ifndef APL_DEFAULT_FAN_GEAR2_RPM
+#define APL_DEFAULT_FAN_GEAR2_RPM       900u
+#endif
+#ifndef APL_DEFAULT_FAN_GEAR3_RPM
+#define APL_DEFAULT_FAN_GEAR3_RPM       1200u
+#endif
+#ifndef APL_DEFAULT_FAN_TURBO_RPM
+#define APL_DEFAULT_FAN_TURBO_RPM       1500u
+#endif
+
+#if (APL_DEFAULT_FAN_SLEEP_RPM < 0) || (APL_DEFAULT_FAN_SLEEP_RPM > 65535UL) \
+ || (APL_DEFAULT_FAN_GEAR1_RPM < 0) || (APL_DEFAULT_FAN_GEAR1_RPM > 65535UL) \
+ || (APL_DEFAULT_FAN_GEAR2_RPM < 0) || (APL_DEFAULT_FAN_GEAR2_RPM > 65535UL) \
+ || (APL_DEFAULT_FAN_GEAR3_RPM < 0) || (APL_DEFAULT_FAN_GEAR3_RPM > 65535UL) \
+ || (APL_DEFAULT_FAN_TURBO_RPM < 0) || (APL_DEFAULT_FAN_TURBO_RPM > 65535UL)
+#error "APL default fan RPM must be between 0 and 65535"
 #endif
 
 /** 关机风干时长，秒。原表 1 小时，「时间待定」 */
@@ -158,12 +185,7 @@
 #error "APL_COMPILE_ANION must be 0 or 1"
 #endif
 
-#ifndef APL_COMPILE_WIFI
-#define APL_COMPILE_WIFI 1u
-#endif
-#if ((APL_COMPILE_WIFI != 0u) && (APL_COMPILE_WIFI != 1u))
-#error "APL_COMPILE_WIFI must be 0 or 1"
-#endif
+/* APL_COMPILE_WIFI is shared in apl_build_config.h. */
 
 #ifndef APL_COMPILE_SENSOR_PM25
 #define APL_COMPILE_SENSOR_PM25 APL_COMPILE_PURIFY
@@ -221,6 +243,10 @@
 #endif
 #if (APL_CORE_SENSOR_FALLBACK_GEAR > 3u)
 #error "APL_CORE_SENSOR_FALLBACK_GEAR must be a physical sleep/1/2/3 gear"
+#endif
+
+#if !APL_COMPILE_SLEEP && ((APL_DEFAULT_FAN_GEAR == 0u) || (APL_CORE_SENSOR_FALLBACK_GEAR == 0u) || (APL_COMPILE_HAS_DRY && (APL_CORE_DRY_FAN_GEAR == 0u)))
+#error "Sleep is compiled out: default, fallback and drying gears must be non-sleep"
 #endif
 
 #endif /* APL_CORE_CONFIG_H */

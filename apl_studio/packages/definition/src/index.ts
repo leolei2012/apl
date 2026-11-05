@@ -19,3 +19,7 @@ export function definitionPackage(product: Product): { bytes: Uint8Array; filena
   for (const [path, content] of Object.entries(files)) archive[`apl-definition/${path}`] = [content, { mtime: new Date(1980, 0, 1) }]
   return { bytes: zipSync(archive), filename: `${d.code}-definition-r${product.revision}.zip`, fingerprint }
 }
+
+export { profileWorkbook } from './profile-workbook'
+export { firmwarePackage } from './firmware-package'
+export { memoryEstimateReport } from './memory-report'

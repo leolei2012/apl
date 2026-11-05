@@ -67,6 +67,16 @@ static void sim_input(int key, int value)
     if (key == 102) input_water = value;
     if (key == 103) input_interlock = value;
     if (!powered) return;
+    if (key == 104 || key == 105) {
+        /* Feed simultaneous levels to the existing C HMI; never call business commands directly. */
+        keys.timer = APL_HMI_KEY_PRESSED;
+        if (key == 104) keys.speed = APL_HMI_KEY_PRESSED;
+        else keys.power = APL_HMI_KEY_PRESSED;
+        run_ticks(value);
+        memset(&keys, 0, sizeof(keys));
+        run_ticks(2);
+        return;
+    }
     switch (key) {
     case 0: level = &keys.purify; break;
     case 1: level = &keys.humidity; break;
@@ -87,17 +97,26 @@ static void sim_snapshot(void)
 {
     struct apl_link_snapshot s = {0};
     char digits[4] = {0};
+    uint8_t red = 0u, green = 0u, blue = 0u;
     if (powered) { apl_core_get_snapshot(&device.core, &s); apl_hmi_get_digits_content(&device.hmi, digits); }
+    if (powered) {
+        unsigned brightness = apl_hmi_get_ambient_brightness(&device.hmi);
+        apl_hmi_get_ambient_color(&device.hmi, &red, &green, &blue);
+        red = (uint8_t)((red * brightness + 127u) / 255u);
+        green = (uint8_t)((green * brightness + 127u) / 255u);
+        blue = (uint8_t)((blue * brightness + 127u) / 255u);
+    }
     /* Digits are data from C; escape every byte instead of interpolating arbitrary text. */
     printf("\"values\":{\"humidity\":%d,\"pm25\":%d,\"water_level\":%d,\"uv_interlock\":%s},", input_humidity, input_pm25, input_water, input_interlock ? "true" : "false");
     printf("\"outputs\":{\"fan\":%d,\"fan_gear\":%d,\"pump\":%d,\"uv\":%d,\"anion\":%d,\"buzzer\":%d},", actual_fan, actual_gear, actual_pump, actual_uv, actual_anion, actual_buzzer);
     printf("\"display\":{\"digits\":\"\\u%04x\\u%04x\\u%04x\",\"unit\":\"%s\",", (unsigned char)digits[0], (unsigned char)digits[1], (unsigned char)digits[2], powered ? (const char *[]) { "", "H", "%", "PM2.5" }[apl_hmi_get_digits_unit(&device.hmi)] : "");
     printf("\"brightness\":%u,\"light\":%u,\"child_lock\":%u,\"ambient\":%u,\"powerup\":%u,", powered ? apl_hmi_get_digits_brightness(&device.hmi) : 0u, powered ? apl_hmi_get_light(&device.hmi) : 0u, powered ? apl_hmi_get_child_lock(&device.hmi) : 0u, powered ? apl_hmi_get_ambient_brightness(&device.hmi) : 0u, powered ? apl_hmi_get_powerup_lamp(&device.hmi) : 0u);
     unsigned water_lamps = 0;
+    printf("\"ambient_red\":%u,\"ambient_green\":%u,\"ambient_blue\":%u,", (unsigned)red, (unsigned)green, (unsigned)blue);
     for (unsigned i = 1; i <= 4; ++i) if (powered && apl_hmi_get_water_lamp(&device.hmi, (uint8_t)i)) water_lamps++;
     printf("\"water_level\":%u", water_lamps);
     for (unsigned i = 0; i < 6; ++i) printf(",\"key_%u\":%u", i, powered ? apl_hmi_get_key_lamp(&device.hmi, (enum apl_hmi_key_id)i) : 0u);
     for (unsigned i = 0; i < APL_HMI_ICON_COUNT; ++i) printf(",\"icon_%u\":%u", i, powered ? apl_hmi_get_icon(&device.hmi, (enum apl_hmi_icon)i) : 0u);
-    printf("},\"internal\":{\"run_state\":%d,\"fan_speed\":%d,\"purify\":%u,\"humidify\":%u,\"humidity\":%u,\"pm25\":%u,\"humidity_target\":%u,\"timer_left_s\":%u,\"dry_left_s\":%u,\"sleep\":%u,\"uv_fault\":%u,\"wifi\":%d,\"filter_purify_left\":%u,\"filter_humidify_left\":%u},", s.run_state, s.fan_gear, s.purify_on, s.humidify_on, s.humidity, s.pm25, s.humidity_target, (unsigned)s.timer_left_s, (unsigned)s.dry_left_s, s.sleep, s.uv_fault, s.wifi, s.filter_purify_left, s.filter_humidify_left);
+    printf("},\"internal\":{\"run_state\":%d,\"fan_speed\":%d,\"purify\":%u,\"humidify\":%u,\"humidity\":%u,\"pm25\":%u,\"humidity_target\":%u,\"timer_left_s\":%u,\"dry_left_s\":%u,\"sleep\":%u,\"uv_fault\":%u,\"wifi\":%d,\"filter_purify_left\":%u,\"filter_humidify_left\":%u,\"filter_reset_seq\":%u},", s.run_state, s.fan_gear, s.purify_on, s.humidify_on, s.humidity, s.pm25, s.humidity_target, (unsigned)s.timer_left_s, (unsigned)s.dry_left_s, s.sleep, s.uv_fault, s.wifi, s.filter_purify_left, s.filter_humidify_left, s.filter_reset_seq);
     printf("\"memory\":{\"valid\":%d,\"running\":%u,\"fan_gear\":%d,\"purify_on\":%u,\"humidify_on\":%u,\"filter_purify_s\":%u,\"filter_humidify_s\":%u}", memory_valid, memory.running, memory.fan_gear, memory.purify_on, memory.humidify_on, (unsigned)memory.filter_purify_s, (unsigned)memory.filter_humidify_s);
 }

@@ -1,12 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams, type ChildProcess } from 'node:child_process'
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve, dirname, delimiter } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
 import { ValidationError, type Product, type Value } from '@apl-studio/model'
 import type { SimulationAction, SimulationDescriptor, SimulationEvent, SimulationSession, SimulationSlot, SimulationSnapshot } from '@apl-studio/model/simulation'
 import { safeRelative, type TemplateRegistry } from '@apl-studio/templates'
 import { defaultCompiler, validateFiles } from './index'
-import { simulationAdapters, type SimulationAdapter } from './simulation-adapters'
+import { simulationAdapters, simulationSource, type SimulationAdapter } from './simulation-adapters'
+import { PROFILE_ID } from '@apl-studio/model/profile'
+import { firmwareBuild } from '@apl-studio/model/firmware'
 
 const failure = (statusCode: number, message: string, code = 'SIMULATION_ERROR') => Object.assign(new Error(message), { statusCode, code })
 interface NativeEvent { kind: 'input' | 'output'; key: string; value: number; ms: number }
@@ -33,7 +35,7 @@ export class SimulationService {
         if (Date.now() - runtime.lastSeen > 120000 && ['building', 'ready'].includes(runtime.session.status)) this.stop(runtime.session.id, '页面超过两分钟未连接，仿真已停止')
         if (runtime.session.status !== 'ready' || !runtime.session.running || runtime.automaticPending) continue
         runtime.automaticPending = true
-        void this.enqueue(runtime, async () => { if (runtime.session.running) await this.send(runtime, 0, 10, 0) }).catch(() => {}).finally(() => { runtime.automaticPending = false })
+        void this.enqueue(runtime, async () => { if (runtime.session.running) await this.send(runtime, 0, 100 / runtime.session.descriptor.tickMs, 0) }).catch(() => {}).finally(() => { runtime.automaticPending = false })
       }
     }, 100)
     this.timer.unref()
@@ -61,12 +63,15 @@ export class SimulationService {
     if (!adapter) throw failure(409, '此模板尚未提供 C 仿真桥接', 'SIMULATION_UNSUPPORTED')
     const errors = provider.validate(product.definition)
     if (errors.length) throw new ValidationError(errors.map(message => ({ path: 'template', message })))
+    if (reference?.id === PROFILE_ID && !firmwareBuild(product.definition).defines.APL_COMPILE_HMI)
+      throw failure(409, '纯主控裁剪不支持当前面板仿真，请导出源码包并由宿主接入按键和显示', 'HMI_COMPILED_OUT')
     if ([...this.runtimes.values()].filter(r => ['building', 'ready'].includes(r.session.status)).length >= 4) throw failure(409, '最多同时运行四个仿真，请先停止不用的会话')
     // Reserve a slot before asynchronous generation, so simultaneous requests cannot exceed the limit.
-    const common = readFileSync(new URL('./runners/common.c', import.meta.url), 'utf8'), source = common.replace('/* ADAPTER */', adapter.source(product.definition))
+    const descriptor = adapter.describe(product.definition)
+    const source = simulationSource(adapter, product.definition, descriptor.tickMs)
     const session: SimulationSession = { id: randomUUID(), productId: product.id, revision: product.revision,
       template: { ...reference!, fingerprint: provider.descriptor.fingerprint }, driverFingerprint: createHash('sha256').update(source).digest('hex'),
-      descriptor: adapter.describe(product.definition), createdAt: new Date().toISOString(), status: 'building', running, snapshot: null, events: [], diagnostics: '' }
+      descriptor, createdAt: new Date().toISOString(), status: 'building', running, snapshot: null, events: [], diagnostics: '' }
     const runtime: Runtime = { session, adapter, chain: Promise.resolve(), sequence: 0, lastSeen: Date.now(), automaticPending: false }
     this.runtimes.set(session.id, runtime)
     for (const [id, old] of this.runtimes) if (this.runtimes.size > 32 && ['failed', 'stopped'].includes(old.session.status)) this.runtimes.delete(id)
@@ -145,6 +150,7 @@ export class SimulationService {
       const timeout = setTimeout(() => { reject(new Error('C 仿真程序未返回初始状态')); child.kill() }, 10000)
       child.stderr.on('data', (chunk: Buffer) => { runtime.session.diagnostics = (runtime.session.diagnostics + chunk.toString('utf8')).slice(-128 * 1024) })
       child.stdout.on('data', (chunk: Buffer) => {
+        if (runtime.session.status === 'stopped') return
         buffer += chunk.toString('utf8')
         try {
           if (buffer.length > 1024 * 1024) throw new Error('C 仿真输出超过限制')
@@ -171,6 +177,7 @@ export class SimulationService {
     })
   }
   private fail(runtime: Runtime, message: string) {
+    if (runtime.session.status === 'stopped') return
     runtime.session.status = 'failed'; runtime.session.running = false
     runtime.session.diagnostics = (runtime.session.diagnostics + '\n' + message).slice(-128 * 1024)
     this.event(runtime, 'system', message)
@@ -192,6 +199,7 @@ export class SimulationService {
   }
   async action(id: string, input: SimulationAction): Promise<SimulationSession> {
     const runtime = this.runtime(id)
+    const tickMs = runtime.session.descriptor.tickMs
     runtime.lastSeen = Date.now()
     const invalid = () => failure(400, '仿真操作或输入值无效', 'INVALID_SIMULATION_INPUT')
     if (!input || typeof input !== 'object') throw invalid()
@@ -202,8 +210,8 @@ export class SimulationService {
         if (typeof action.value !== 'boolean') throw invalid()
         runtime.session.running = action.value; this.event(runtime, 'system', action.value ? '仿真继续运行' : '仿真已暂停')
       } else if (action.type === 'advance') {
-        if (!Number.isSafeInteger(action.ms) || action.ms < 10 || action.ms > 60000 || action.ms % 10) throw invalid()
-        await this.send(runtime, 0, action.ms / 10, 0)
+        if (!Number.isSafeInteger(action.ms) || action.ms < tickMs || action.ms > 60000 || action.ms % tickMs) throw invalid()
+        await this.send(runtime, 0, action.ms / tickMs, 0)
       } else if (action.type === 'supply') {
         if (typeof action.on !== 'boolean') throw invalid()
         this.event(runtime, 'system', action.on ? '模拟上电' : '模拟掉电')
@@ -211,6 +219,17 @@ export class SimulationService {
       } else if (action.type === 'reset') {
         this.event(runtime, 'system', '重置设备、时钟和模拟存储器')
         await this.send(runtime, 2, 0, 0)
+      } else if (action.type === 'combo') {
+        if (!Array.isArray(action.keys) || action.keys.length < 2 || action.keys.length > 6
+          || action.keys.some(key => typeof key !== 'string') || new Set(action.keys).size !== action.keys.length
+          || !Number.isSafeInteger(action.holdMs) || action.holdMs < tickMs || action.holdMs > 60000 || action.holdMs % tickMs) throw invalid()
+        const combination = runtime.session.descriptor.combinations?.find(c => c.keys.length === action.keys.length && c.keys.every(key => action.keys.includes(key)))
+        if (!combination || !Object.hasOwn(runtime.adapter.inputCodes, combination.key)
+          || combination.keys.some(key => !runtime.session.descriptor.controls.some(c => c.key === key && c.kind === 'gesture' && c.target === 'key'))) throw invalid()
+        if (!runtime.session.snapshot?.powered) throw failure(409, '设备已掉电，请先上电')
+        this.event(runtime, 'input', `组合输入 ${combination.keys.join(' + ')} · ${combination.name}，保持 ${action.holdMs} ms`)
+        // The native bridge presses and releases the whole set before replying; no held key survives a request.
+        await this.send(runtime, 3, runtime.adapter.inputCodes[combination.key], action.holdMs / tickMs)
       } else if (action.type === 'input') {
         const control = runtime.session.descriptor.controls.find(c => c.key === action.key)
         if (!control || !Object.hasOwn(runtime.adapter.inputCodes, action.key)) throw invalid()

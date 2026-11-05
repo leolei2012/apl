@@ -17,7 +17,7 @@ static void sim_event(const char *kind, const char *key, int value)
 static void run_ticks(int count)
 {
     for (int i = 0; i < count; ++i) {
-        clock_ms += 10u;
+        clock_ms += SIM_TICK_MS;
         if (powered) sim_step();
     }
 }
@@ -38,7 +38,7 @@ int main(void)
     while (fgets(line, sizeof(line), stdin)) {
         unsigned id; int op, a, b;
         if (sscanf(line, "%u %d %d %d", &id, &op, &a, &b) != 4) return 2;
-        if (op == 0 && a >= 0 && a <= 6000) run_ticks(a);
+        if (op == 0 && a >= 0 && a <= 60000 / SIM_TICK_MS) run_ticks(a);
         else if (op == 1) {
             if (a && !powered) { powered = 1; sim_boot(); }
             else if (!a && powered) { powered = 0; sim_drop(); }

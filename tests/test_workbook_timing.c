@@ -32,6 +32,49 @@ static unsigned digits(struct apl *self)
     for (i = 0u; i < APL_HMI_DIGIT_COUNT; i++) { if (text[i] != ' ') { assert(text[i] >= '0' && text[i] <= '9'); result = result * 10u + (unsigned)(text[i] - '0'); } }
     return result;
 }
+static void start_step(struct apl *self, struct host *host, uint8_t step)
+{
+    struct apl_profile profile;
+    memset(host, 0, sizeof(*host)); apl_profile_defaults(&profile); profile.timer_step_h = step;
+    assert(APL_PROFILE_OK == apl_init_profile(self, &core, host, &hmi, host, &profile));
+    apl_link_bind(self); ticks(self, 210u); command(self, APL_LINK_CMD_POWER, 0u); ticks(self, 100u);
+}
+static void configurable_timer(void)
+{
+    struct apl self; struct host host; struct apl_link_snapshot snap; unsigned step;
+    for (step = 1u; step <= 24u; ++step)
+    {
+        unsigned value = step;
+        start_step(&self, &host, (uint8_t)step);
+        apl_core_get_snapshot(&self.core, &snap); assert(snap.timer_step_h == step);
+        short_timer(&self, &host); assert(value == digits(&self));
+        do {
+            value = value + step > 24u ? 0u : value + step;
+            short_timer(&self, &host); assert(value == digits(&self));
+        } while (value != 0u);
+        short_timer(&self, &host); assert(step == digits(&self));
+        ticks(&self, 301u);
+        assert(apl_core_get_timer(&self.core) <= step * 3600UL && apl_core_get_timer(&self.core) >= step * 3600UL - 1u);
+        /* Existing timers need not lie on the step grid; first press only queries. */
+        command(&self, APL_LINK_CMD_TIMER_SET, 5u); ticks(&self, 1u);
+        short_timer(&self, &host); assert(5u == digits(&self));
+        short_timer(&self, &host); assert((5u + step > 24u ? 0u : 5u + step) == digits(&self));
+    }
+    start_step(&self, &host, 2u); short_timer(&self, &host);
+    host.keys.timer = APL_HMI_KEY_PRESSED;
+    ticks(&self, 149u); assert(2u == digits(&self));
+    ticks(&self, 1u); assert(4u == digits(&self));
+    ticks(&self, 49u); assert(4u == digits(&self));
+    ticks(&self, 1u); assert(6u == digits(&self));
+    host.keys.timer = APL_HMI_KEY_RELEASED; ticks(&self, 1u); assert(6u == digits(&self));
+    assert(APL_HMI_CHILD_LOCK_OFF == apl_hmi_get_child_lock(&self.hmi));
+    start_step(&self, &host, 5u); command(&self, APL_LINK_CMD_TIMER_SET, 24u); ticks(&self, 1u);
+    short_timer(&self, &host); assert(24u == digits(&self));
+    host.keys.timer = APL_HMI_KEY_PRESSED;
+    ticks(&self, 150u); assert(0u == digits(&self));
+    ticks(&self, 199u); assert(0u == digits(&self));
+    ticks(&self, 1u); assert(5u == digits(&self));
+}
 int main(void)
 {
     struct apl self; struct host host;
@@ -73,6 +116,7 @@ int main(void)
     start(&self, &host); command(&self, APL_LINK_CMD_TIMER_SET, 1u);
     ticks(&self, 360000UL);
     assert((APL_COMPILE_HUMIDIFY ? APL_RUN_DRY : APL_RUN_STANDBY) == apl_core_get_run_state(&self.core));
-    puts("PASS: 499/500 sleep boundary, 149/150 and 49/50 timer repeat, zero pause, release, child lock and normal expiry");
+    configurable_timer();
+    puts("PASS: sleep boundary, timer repeat, configurable steps 1..24h, off-grid query, zero pause, release, child lock and normal expiry");
     return 0;
 }

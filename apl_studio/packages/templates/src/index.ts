@@ -219,3 +219,5 @@ export class TemplateRegistry {
 export const name = 'templates'
 declare module 'cordis' { interface Context { templates: TemplateRegistry } }
 export function apply(ctx: Context) { ctx.provide('templates', new TemplateRegistry()) }
+
+export { RuntimeProfileProvider } from './runtime-profile'

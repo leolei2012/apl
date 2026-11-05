@@ -6,6 +6,8 @@
 #ifndef APL_HMI_CONFIG_H
 #define APL_HMI_CONFIG_H
 
+#include "apl_build_config.h"
+
 /**
  * 编译控制：选定一块按键/显示面板，只编译该面板的实现。
  * 对外仍是一个 struct apl_hmi。净化、加湿是否启用看主控快照，不在本文件。

@@ -110,7 +110,7 @@ int main(int argc, char **argv)
         if (!write(folder + "/smoke.c", smoke)) return 1;
         QStringList common = {"-std=c11", "-Wall", "-Wextra", "-Werror", "-finput-charset=UTF-8",
             "-I" + folder + "/include", "-I" + folder + "/config", "-I" + folder + "/port",
-            folder + "/src/apl.c", folder + "/src/apl_core.c", folder + "/src/apl_hmi.c"};
+            folder + "/src/apl.c", folder + "/src/apl_core.c", folder + "/src/apl_hmi.c", folder + "/src/apl_wifi.c"};
         const QString exe = folder + "/smoke.exe";
         if (!compile(common + QStringList{folder + "/port/apl_port.c", folder + "/examples/app.c",
                                           folder + "/smoke.c", "-o", exe})) return 1;

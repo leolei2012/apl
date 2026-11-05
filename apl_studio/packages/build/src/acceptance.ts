@@ -9,7 +9,7 @@ import type { AcceptanceReport } from '@apl-studio/model/template'
 import type { SimulationSession, SimulationSnapshot } from '@apl-studio/model/simulation'
 import { safeRelative, type TemplateProvider, type TemplateRegistry } from '@apl-studio/templates'
 import { SimulationService } from './simulation'
-import { simulationAdapters } from './simulation-adapters'
+import { simulationAdapters, simulationSource } from './simulation-adapters'
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 const failure = (message: string, code = 'ACCEPTANCE_REQUIRED') => Object.assign(new Error(message), { statusCode: 409, code })
@@ -22,7 +22,7 @@ export function generatedFingerprint(files: Map<string, Uint8Array>) {
 function driverFingerprint(product: Product, provider: TemplateProvider) {
   const adapter = simulationAdapters.find(a => a.supports(provider.descriptor))
   if (!adapter) throw failure('当前方案没有真实C验收桥接')
-  return hash(readFileSync(new URL('./runners/common.c', import.meta.url), 'utf8').replace('/* ADAPTER */', adapter.source(product.definition)))
+  return hash(simulationSource(adapter, product.definition))
 }
 
 /** Only the server runs/records acceptance. Client requests never contain results. */
