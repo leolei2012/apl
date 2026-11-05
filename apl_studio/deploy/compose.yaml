@@ -1,0 +1,31 @@
+name: apl-studio
+services:
+  studio:
+    build:
+      context: ../..
+      dockerfile: apl_studio/Dockerfile
+    image: apl-studio:local
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      APL_STUDIO_HOST: 0.0.0.0
+      APL_STUDIO_PORT: "9190"
+      APL_STUDIO_PUBLIC_URL: ${APL_STUDIO_PUBLIC_URL:?Set APL_STUDIO_PUBLIC_URL to the HTTPS public origin}
+      APL_STUDIO_USERNAME: ${APL_STUDIO_USERNAME:?Set APL_STUDIO_USERNAME}
+      APL_STUDIO_PASSWORD: ${APL_STUDIO_PASSWORD:?Set a unique APL_STUDIO_PASSWORD}
+      APL_STUDIO_DATA: /var/lib/apl-studio
+      APL_STUDIO_CC: /usr/bin/gcc
+    ports:
+      - "127.0.0.1:9190:9190"
+    volumes:
+      - studio-data:/var/lib/apl-studio
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=128m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  studio-data:

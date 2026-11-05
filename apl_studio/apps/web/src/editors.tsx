@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { newFunction, validateDefinition, kindNames, accessNames, type Definition, type FunctionDefinition, type Kind, type Access, type Parameter } from '@apl-studio/model'
+import { newFunction, newId, validateDefinition, kindNames, accessNames, type Definition, type FunctionDefinition, type Kind, type Access, type Parameter } from '@apl-studio/model'
 import { Field, Modal, Select, Switch } from './components'
 
 export function FunctionEditor({ definition, original, onSave, onClose }: { definition: Definition; original: FunctionDefinition | null; onSave: (field: FunctionDefinition) => void; onClose: () => void }) {
-  const [field, setField] = useState<FunctionDefinition>(() => original ? structuredClone(original) : { ...newFunction(crypto.randomUUID()), key: `function_${definition.functions.length + 1}` })
+  const [field, setField] = useState<FunctionDefinition>(() => original ? structuredClone(original) : { ...newFunction(newId()), key: `function_${definition.functions.length + 1}` })
   const [error, setError] = useState('')
   const update = <K extends keyof FunctionDefinition>(key: K, value: FunctionDefinition[K]) => setField(f => ({ ...f, [key]: value }))
   function changeKind(kind: Kind) {
@@ -35,7 +35,7 @@ export function FunctionEditor({ definition, original, onSave, onClose }: { defi
 }
 
 export function ParameterEditor({ definition, original, onSave, onClose }: { definition: Definition; original: Parameter | null; onSave: (value: Parameter) => void; onClose: () => void }) {
-  const [field, setField] = useState<Parameter>(() => original ? { ...original } : { id: crypto.randomUUID(), key: `parameter_${definition.parameters.length + 1}`, name: '新参数', value: 10 })
+  const [field, setField] = useState<Parameter>(() => original ? { ...original } : { id: newId(), key: `parameter_${definition.parameters.length + 1}`, name: '新参数', value: 10 })
   const [error, setError] = useState('')
   function submit(event: React.FormEvent) {
     event.preventDefault()

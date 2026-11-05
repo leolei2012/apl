@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Bell, Box, Boxes, Check, CheckCircle2, ChevronRight, CircleDashed, Code2, Download, FileCode2, FileJson, FolderOpen, Layers, LayoutGrid, Loader2, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, X, Info, ExternalLink, RefreshCw } from 'lucide-react'
-import { STUDIO_VERSION, emptyDefinition, exampleDefinition, parseDefinition, validateDefinition, type Definition, type FunctionDefinition, type Parameter, type Product } from '@apl-studio/model'
+import { STUDIO_VERSION, emptyDefinition, exampleDefinition, newId, parseDefinition, validateDefinition, type Definition, type FunctionDefinition, type Parameter, type Product } from '@apl-studio/model'
 import { api, ApiError, download } from './api'
 import { Field, Modal, Select, Time } from './components'
 import { FunctionEditor, ParameterEditor } from './editors'
@@ -153,7 +153,7 @@ export default function App() {
     finally { setBusy(false) }
   }
   async function createExample() {
-    const definition = exampleDefinition(() => crypto.randomUUID())
+    const definition = exampleDefinition(newId)
     const base = definition.code
     let number = 2
     while (products.some(p => p.definition.code === definition.code)) definition.code = base + '_' + number++
@@ -215,7 +215,7 @@ function CreateProduct({ products, busy, onClose, onCreate }: { products: Produc
   const [category, setCategory] = useState('自定义产品'), [error, setError] = useState('')
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    const d = { ...(preset === 'example' ? exampleDefinition(() => crypto.randomUUID()) : emptyDefinition()), name, code, category }
+    const d = { ...(preset === 'example' ? exampleDefinition(newId) : emptyDefinition()), name, code, category }
     const issues = validateDefinition(d)
     if (issues.length) { setError(issues[0].message); return }
     try { await onCreate(d) } catch (e) { setError((e as Error).message) }

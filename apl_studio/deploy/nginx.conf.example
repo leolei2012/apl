@@ -1,0 +1,32 @@
+# Load this file inside nginx's http {} context (for example conf.d/).
+# Replace apl.example.com and both certificate paths before nginx -t.
+map $http_upgrade $apl_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 80;
+    server_name apl.example.com;
+    return 301 https://apl.example.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name apl.example.com;
+    ssl_certificate /etc/letsencrypt/live/apl.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/apl.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 1m;
+
+    location / {
+        proxy_pass http://127.0.0.1:9190;
+        proxy_http_version 1.1;
+        # Host and Origin must remain consistent with APL_STUDIO_PUBLIC_URL.
+        proxy_set_header Host $http_host;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $apl_connection_upgrade;
+        proxy_read_timeout 300s;
+    }
+}

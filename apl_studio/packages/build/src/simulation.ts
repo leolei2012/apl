@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { resolve, dirname, delimiter } from 'node:path'
+import { resolve, dirname } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
 import { ValidationError, type Product, type Value } from '@apl-studio/model'
 import type { SimulationAction, SimulationDescriptor, SimulationEvent, SimulationSession, SimulationSlot, SimulationSnapshot } from '@apl-studio/model/simulation'
@@ -9,6 +9,7 @@ import { defaultCompiler, validateFiles } from './index'
 import { simulationAdapters, simulationSource, type SimulationAdapter } from './simulation-adapters'
 import { PROFILE_ID } from '@apl-studio/model/profile'
 import { firmwareBuild } from '@apl-studio/model/firmware'
+import { childEnvironment } from './process-environment'
 
 const failure = (statusCode: number, message: string, code = 'SIMULATION_ERROR') => Object.assign(new Error(message), { statusCode, code })
 interface NativeEvent { kind: 'input' | 'output'; key: string; value: number; ms: number }
@@ -129,7 +130,7 @@ export class SimulationService {
     }
     runtime.session.snapshot = snapshot
   }
-  private environment() { return { ...process.env, PATH: dirname(this.compiler) + delimiter + (process.env.PATH ?? '') } }
+  private environment() { return childEnvironment(this.compiler) }
   private compile(runtime: Runtime, args: string[], cwd: string) {
     return new Promise<void>((accept, reject) => {
       const child = spawn(this.compiler, args, { cwd, env: this.environment(), windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })

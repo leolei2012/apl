@@ -1,5 +1,7 @@
 # APL
 
+Web APL Studio现支持服务器公网部署，包含访问账号、HTTPS/WebSocket反代配置和Docker持久化部署入口，见[公网部署](apl_studio/deploy/README.md)。本地默认仍为`127.0.0.1:9190`。
+
 新方向是固定全功能固件，由 [Web APL Studio](apl_studio/README.md) 生成产品参数，再导入设备。APL 开发版 0.3.0 已提供运行时方案的校验、冷启动加载和读回，见 [运行时参数配置](docs/规格/APL运行时参数配置.md)。导入协议待定；当前 Web 的 SDK 交付和冻结模板仍按既有流程运行，尚未改为参数下发。`simulator/` 内旧 Qt 工具保留作历史参考。
 
 空气净化与加湿库。库内不创建实例，使用方持有一份 `struct apl`。

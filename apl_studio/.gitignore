@@ -4,3 +4,6 @@ apps/web/dist/
 output/
 *.log
 .playwright-cli/
+.env
+.env.*
+!.env.example

@@ -1,4 +1,5 @@
 export const STUDIO_VERSION = '0.1.0'
+export { newId, type IdCrypto } from './id'
 export type Value = boolean | number | string
 export type Kind = 'bool' | 'int' | 'enum' | 'string'
 export type Access = 'read' | 'write' | 'readwrite'

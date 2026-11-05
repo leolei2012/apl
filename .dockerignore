@@ -1,0 +1,17 @@
+**
+!apl_studio
+!apl_studio/**
+!apl_lib
+!apl_lib/**
+!apl_sdk_template
+!apl_sdk_template/**
+**/node_modules
+**/.data
+**/output
+**/.playwright-cli
+**/__pycache__
+**/*.log
+**/.env
+**/.env.*
+!apl_studio/.env.example
+apl_studio/apps/web/dist

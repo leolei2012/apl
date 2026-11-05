@@ -2,7 +2,7 @@ import type { Context } from 'cordis'
 import z from 'schemastery'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, renameSync } from 'node:fs'
-import { resolve, dirname, delimiter } from 'node:path'
+import { resolve, dirname } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
 import { zipSync, unzipSync } from 'fflate'
 import { STUDIO_VERSION, ValidationError, type Product } from '@apl-studio/model'
@@ -10,6 +10,7 @@ import type { BuildJob, NativeVerification } from '@apl-studio/model/template'
 import { safeRelative, type TemplateRegistry } from '@apl-studio/templates'
 import { SimulationService } from './simulation'
 import { AcceptanceService } from './acceptance'
+import { childEnvironment } from './process-environment'
 export { AcceptanceService } from './acceptance'
 export { SimulationService } from './simulation'
 export { simulationAdapters, type SimulationAdapter } from './simulation-adapters'
@@ -138,7 +139,7 @@ export class SdkBuildService {
   private command(args: string[], cwd: string, executable = this.compiler, timeoutMs = 120000): Promise<string> {
     return new Promise((resolveOutput, reject) => {
       let output = '', timedOut = false
-      const environment = { ...process.env, PATH: dirname(this.compiler) + delimiter + (process.env.PATH ?? '') }
+      const environment = childEnvironment(this.compiler)
       const processHandle = spawn(executable, args, { cwd, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
       this.current = processHandle
       const collect = (chunk: Buffer) => { if (output.length < 256 * 1024) output += chunk.toString('utf8') }

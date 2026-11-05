@@ -3,6 +3,7 @@ import { KEY_MAPPING_PARAMETER, keyMappingIssues } from './key-mapping'
 import type { ProfileKeyMapping } from './key-mapping'
 import type { Definition } from './index'
 import { validateDefinition } from './index'
+import { newId } from './id'
 import type { TemplateDescriptor } from './template'
 
 export const PROFILE_ID = 'apl.runtime-profile'
@@ -35,7 +36,7 @@ export function bindCurrentProfile(d: Definition, catalog: ProfileCatalog): Defi
   return { ...d, template: { id: PROFILE_ID, version: catalog.schema.aplVersion }, parameters }
 }
 export function newProfile(catalog: ProfileCatalog, name: string, features: ProductFeatures = { purify: true, humidify: false }): Definition {
-  const d: Definition = { schemaVersion: 1, name, code: 'device_' + crypto.randomUUID().replaceAll('-', '').slice(0, 12), category: '环境电器', description: '', sdkVersion: '0.1.0', functions: [],
+  const d: Definition = { schemaVersion: 1, name, code: 'device_' + newId().replaceAll('-', '').slice(0, 12), category: '环境电器', description: '', sdkVersion: '0.1.0', functions: [],
     template: { id: PROFILE_ID, version: catalog.schema.aplVersion }, parameters: catalog.schema.parameters.map(p => ({ id: p.key, key: p.key, name: p.name, value: p.default })) }
   d.parameters.push({ id: 'source_fingerprint', key: 'source_fingerprint', name: 'APL源码与参数定义指纹', value: catalog.source.fingerprint })
   d.parameters.push({ id: 'pid', key: 'pid', name: '产品 PID', value: catalog.schema.identity.pid.default })

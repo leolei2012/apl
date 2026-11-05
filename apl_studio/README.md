@@ -29,9 +29,11 @@ npm start
 
 从APL仓库根目录先进入 `apl_studio`，再执行 `npm start`；与ProbeStation一样，先构建网页再启动服务。当前本机依赖已齐全，不需要重新安装；缺依赖时start.cmd只提示并退出，不自动安装。
 
-访问 http://127.0.0.1:9190；Windows 也可双击 [start.cmd](start.cmd)。服务固定监听本机9190，不读取APL_STUDIO_PORT、不自动换端口。启动前先检查端口，占用时显示中文提示并退出，数据库尚未打开；不停止其他进程。预检后若发生端口抢占，实际监听失败也会清理资源退出。
+访问 http://127.0.0.1:9190；Windows 也可双击 [start.cmd](start.cmd)。服务缺省监听本机9190，可通过`APL_STUDIO_HOST`、`APL_STUDIO_PORT`配置监听；端口占用时不自动换端口。启动前先检查端口，占用时显示中文提示并退出，数据库尚未打开；不停止其他进程。预检后若发生端口抢占，实际监听失败也会清理资源退出。
 
 产品和修订持续保存在 `apl_studio/.data/studio.db`，SDK/验收资料在同一`.data`下；重启复用原数据，不每次生成空目录，也不自动迁移或导入19191/19194/19195的隔离数据。已有APL_STUDIO_DATA覆盖仍保留供隔离测试，普通启动无需设置；若终端之前设过该变量，确认终端打印的数据路径，想使用工程默认库可新开干净终端。
+
+公网部署使用HTTPS域名及部署级访问账号，完整配置、Docker Compose和Nginx示例见[公网部署](deploy/README.md)。API、下载和WebSocket使用同一域名，支持HTTPS反向代理；当前是共享工作区，不提供多用户数据隔离。
 
 开发时分别运行 `npm run dev`、`npm run dev:web`；Vite 页面 http://127.0.0.1:5174 代理 API / WebSocket。服务托管已构建页面，用 `npm run build:web` 更新。
 
@@ -58,7 +60,7 @@ npm start
 - JSON 导入导出与定义包。定义包标记 `sdkReady: false`，验证通过的源码 SDK 标记 `sdkReady: true`。
 - WebSocket 变更通知、重连、Ctrl+S、草稿保护与移动端布局。
 
-目前没有共享能力目录、MCP、账户、多租户或任意芯片工程生成。仿真支持 AP 与灯控的已接入版本，新增产品族需要自己的 C 宿主桥接。后续仿真功能统一在 Web 推进；[simulator](../simulator/README.md) 内旧 Qt 工具保留作历史参考，不再继续功能开发。
+目前没有共享能力目录、MCP、个人账户、多租户或任意芯片工程生成；公网模式提供一个部署级访问账号。仿真支持 AP 与灯控的已接入版本，新增产品族需要自己的 C 宿主桥接。后续仿真功能统一在 Web 推进；[simulator](../simulator/README.md) 内旧 Qt 工具保留作历史参考，不再继续功能开发。
 
 ## 目录与技术栈
 
@@ -78,11 +80,13 @@ npm start
 ## 设置与数据
 
 - `APL_STUDIO_DATA`：默认 .data，包含 studio.db 和 sdk/<任务 UUID>/，停服后备份整个目录。
-- 端口固定9190（apps/server/src/startup.ts），Vite代理也使用9190。旧`APL_STUDIO_PORT`不再影响新工程服务，已运行旧快照不变。
+- `APL_STUDIO_HOST`、`APL_STUDIO_PORT`：缺省127.0.0.1和9190；Vite开发代理默认仍使用9190。
+- `APL_STUDIO_PUBLIC_URL`：公网浏览器访问的HTTP(S) origin；公网监听需设置精确公开地址。
+- `APL_STUDIO_USERNAME`、`APL_STUDIO_PASSWORD`：部署级访问账号，公网配置时必须成对设置；本地可选。网页、API、下载和WebSocket均受保护。
 - `APL_STUDIO_TEMPLATES`：默认相邻的 apl_sdk_template，启动时加载；发布新版本后重启。
 - `APL_STUDIO_CC`：本机编译器路径，其次读取 CC。Windows 检测已有 C:/Qt/Tools/mingw1310_64/bin/gcc.exe，否则使用 PATH 中的 gcc；不依赖 Qt 界面或 Qt 库。
 
-编译器仅在服务端配置，网页不接受任意源码或执行命令。模板属于本地受信任源码；公网部署需独立构建环境和项目隔离。
+编译器仅在服务端配置，网页不接受任意源码或执行命令。模板属于服务端受信任源码，仿真与生成在服务器执行。公网使用HTTPS和部署级访问账号；若需要多个团队分别保管数据，应部署各自的数据目录和服务实例。
 
 ## 检查
 
